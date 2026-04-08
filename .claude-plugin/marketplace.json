@@ -1,0 +1,38 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ship-pipeline",
+  "description": "Full-cycle shipping pipeline for Claude Code — one command from idea to merged PR",
+  "owner": {
+    "name": "GoKwik",
+    "email": "engineering@gokwik.co"
+  },
+  "plugins": [
+    {
+      "name": "ship",
+      "source": "./",
+      "description": "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver with hard quality gates and auto-learning",
+      "version": "1.0.0",
+      "author": {
+        "name": "GoKwik",
+        "email": "engineering@gokwik.co"
+      },
+      "homepage": "https://github.com/GoKwik/ship-pipeline",
+      "repository": "https://github.com/GoKwik/ship-pipeline",
+      "license": "MIT",
+      "keywords": [
+        "shipping",
+        "pipeline",
+        "tdd",
+        "code-review",
+        "quality-gates"
+      ],
+      "category": "workflow",
+      "tags": [
+        "shipping",
+        "pipeline",
+        "quality"
+      ],
+      "strict": false
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "ship",
+  "version": "1.0.0",
+  "description": "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver with hard quality gates and auto-learning",
+  "author": {
+    "name": "GoKwik",
+    "url": "https://github.com/GoKwik"
+  },
+  "homepage": "https://github.com/GoKwik/ship-pipeline",
+  "repository": "https://github.com/GoKwik/ship-pipeline",
+  "license": "MIT",
+  "keywords": [
+    "shipping",
+    "pipeline",
+    "tdd",
+    "code-review",
+    "quality-gates",
+    "ci-cd"
+  ],
+  "skills": ["./skills/"],
+  "commands": ["./commands/"]
+}
