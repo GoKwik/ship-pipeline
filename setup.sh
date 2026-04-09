@@ -42,7 +42,7 @@ ERRORS=0
 # ─────────────────────────────────────────────────────────────
 # Check 1: Claude Code CLI
 # ─────────────────────────────────────────────────────────────
-header "1/7 Claude Code CLI"
+header "1/11 Claude Code CLI"
 
 if command -v claude &>/dev/null; then
   CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
@@ -57,7 +57,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 2: Everything Claude Code (ECC) plugin
 # ─────────────────────────────────────────────────────────────
-header "2/7 Everything Claude Code (ECC) plugin"
+header "2/11 Everything Claude Code (ECC) plugin"
 
 ECC_INSTALLED=false
 
@@ -97,7 +97,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 3: Codex plugin
 # ─────────────────────────────────────────────────────────────
-header "3/7 Codex plugin"
+header "3/11 Codex plugin"
 
 CODEX_PLUGIN_INSTALLED=false
 
@@ -136,7 +136,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 4: Codex CLI authentication
 # ─────────────────────────────────────────────────────────────
-header "4/7 Codex CLI authentication"
+header "4/11 Codex CLI authentication"
 
 if command -v codex &>/dev/null; then
   pass "Codex CLI found"
@@ -192,7 +192,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 5: /ship command installed
 # ─────────────────────────────────────────────────────────────
-header "5/7 /ship command"
+header "5/11 /ship command"
 
 if [ -f "${COMMAND_DST}" ]; then
   # Check if it's up to date by comparing the command file with the source SKILL.md
@@ -239,7 +239,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 6: Pipeline enforcement hooks
 # ─────────────────────────────────────────────────────────────
-header "6/7 Pipeline enforcement hooks"
+header "6/11 Pipeline enforcement hooks"
 
 HOOK_SCRIPT="${SCRIPT_DIR}/hooks/ship-gate.sh"
 SETTINGS_FILE="${HOME}/.claude/settings.json"
@@ -326,7 +326,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 7: Pipe-test the hook
 # ─────────────────────────────────────────────────────────────
-header "7/7 Hook pipe-test"
+header "7/11 Hook pipe-test"
 
 if [ -x "${HOOK_SCRIPT}" ]; then
   TEST_DIR=$(mktemp -d)
@@ -449,6 +449,83 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   cd "${SCRIPT_DIR}"
 else
   warn "Hook script not executable — skipping pipe-test"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 8: /contextualize command
+# ─────────────────────────────────────────────────────────────
+header "8/11 /contextualize command"
+
+CONTEXTUALIZE_SRC="${SCRIPT_DIR}/skills/contextualize/SKILL.md"
+CONTEXTUALIZE_CMD="${SCRIPT_DIR}/commands/contextualize.md"
+
+if [ -f "${CONTEXTUALIZE_SRC}" ] && [ -f "${CONTEXTUALIZE_CMD}" ]; then
+  pass "/contextualize skill and command found"
+else
+  fail "/contextualize files missing"
+  [ ! -f "${CONTEXTUALIZE_SRC}" ] && info "Missing: skills/contextualize/SKILL.md"
+  [ ! -f "${CONTEXTUALIZE_CMD}" ] && info "Missing: commands/contextualize.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 9: /review-tech command
+# ─────────────────────────────────────────────────────────────
+header "9/11 /review-tech command"
+
+REVIEW_TECH_SRC="${SCRIPT_DIR}/skills/review-tech/SKILL.md"
+REVIEW_TECH_CMD="${SCRIPT_DIR}/commands/review-tech.md"
+
+if [ -f "${REVIEW_TECH_SRC}" ] && [ -f "${REVIEW_TECH_CMD}" ]; then
+  pass "/review-tech skill and command found"
+else
+  fail "/review-tech files missing"
+  [ ! -f "${REVIEW_TECH_SRC}" ] && info "Missing: skills/review-tech/SKILL.md"
+  [ ! -f "${REVIEW_TECH_CMD}" ] && info "Missing: commands/review-tech.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 10: /review-features command
+# ─────────────────────────────────────────────────────────────
+header "10/11 /review-features command"
+
+REVIEW_FEATURES_SRC="${SCRIPT_DIR}/skills/review-features/SKILL.md"
+REVIEW_FEATURES_CMD="${SCRIPT_DIR}/commands/review-features.md"
+
+if [ -f "${REVIEW_FEATURES_SRC}" ] && [ -f "${REVIEW_FEATURES_CMD}" ]; then
+  pass "/review-features skill and command found"
+else
+  fail "/review-features files missing"
+  [ ! -f "${REVIEW_FEATURES_SRC}" ] && info "Missing: skills/review-features/SKILL.md"
+  [ ! -f "${REVIEW_FEATURES_CMD}" ] && info "Missing: commands/review-features.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 11: /review-product command + Linear
+# ─────────────────────────────────────────────────────────────
+header "11/11 /review-product command + Linear"
+
+REVIEW_PRODUCT_SRC="${SCRIPT_DIR}/skills/review-product/SKILL.md"
+REVIEW_PRODUCT_CMD="${SCRIPT_DIR}/commands/review-product.md"
+
+if [ -f "${REVIEW_PRODUCT_SRC}" ] && [ -f "${REVIEW_PRODUCT_CMD}" ]; then
+  pass "/review-product skill and command found"
+else
+  fail "/review-product files missing"
+  [ ! -f "${REVIEW_PRODUCT_SRC}" ] && info "Missing: skills/review-product/SKILL.md"
+  [ ! -f "${REVIEW_PRODUCT_CMD}" ] && info "Missing: commands/review-product.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# Check Linear API token (optional)
+if [ -n "${LINEAR_API_KEY:-}" ]; then
+  pass "LINEAR_API_KEY is set (Linear sync will work)"
+else
+  warn "LINEAR_API_KEY not set (Linear sync will be disabled)"
+  info "Set LINEAR_API_KEY in your environment for Linear integration"
+  info "Linear sync is optional — all other features work without it"
 fi
 
 # ─────────────────────────────────────────────────────────────
