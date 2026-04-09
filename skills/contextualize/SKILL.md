@@ -2,7 +2,7 @@
 name: contextualize
 description: "Generate a comprehensive AI context document (bible) for any repo. Produces .claude/product-review/CONTEXT.md with identity, architecture, capabilities, data model, integrations, tests, infra, team, open work, and docs state."
 origin: custom
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, Agent
 ---
 
 # /contextualize — AI Context Bible Generator
