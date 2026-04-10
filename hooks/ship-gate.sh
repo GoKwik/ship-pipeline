@@ -114,21 +114,22 @@ record_step() {
 }
 
 # ── Prerequisite map ──
-# Each step lists what must be done before it can start
+# Each step lists what must be done before it can start.
+# LEARNINGS_* gates ensure learning capture before the next phase begins.
 get_prereqs() {
   case "$1" in
     STEP_1A) echo "" ;;
     STEP_1B) echo "STEP_1A" ;;
-    STEP_2)  echo "STEP_1A STEP_1B" ;;
-    STEP_3A) echo "STEP_2" ;;
-    STEP_3B) echo "STEP_2" ;;
-    STEP_3C) echo "STEP_2" ;;
-    STEP_4B) echo "STEP_3A STEP_3B" ;;
-    STEP_5A) echo "STEP_3A STEP_3B" ;;
+    STEP_2)  echo "STEP_1A STEP_1B LEARNINGS_PLAN" ;;
+    STEP_3A) echo "STEP_2 LEARNINGS_TDD" ;;
+    STEP_3B) echo "STEP_2 LEARNINGS_TDD" ;;
+    STEP_3C) echo "STEP_2 LEARNINGS_TDD" ;;
+    STEP_4B) echo "STEP_3A STEP_3B LEARNINGS_REVIEW" ;;
+    STEP_5A) echo "STEP_3A STEP_3B LEARNINGS_REVIEW" ;;
     STEP_5B) echo "STEP_5A" ;;
     STEP_5C) echo "STEP_5A" ;;
-    STEP_6)  echo "STEP_5A STEP_5C" ;;
-    STEP_7A) echo "STEP_6" ;;
+    STEP_6)  echo "STEP_5A STEP_5C LEARNINGS_VERIFY" ;;
+    STEP_7A) echo "STEP_6 LEARNINGS_EVAL" ;;
     STEP_7B) echo "STEP_7A" ;;
     *)       echo "" ;;
   esac
@@ -150,6 +151,12 @@ step_name() {
     STEP_6)  echo "Phase 6: Eval (/eval)" ;;
     STEP_7A) echo "Phase 7A: Commit (/prp-commit)" ;;
     STEP_7B) echo "Phase 7B: PR (/prp-pr)" ;;
+    LEARNINGS_PLAN)   echo "Capture learnings → .claude/ship-learnings/plan.md" ;;
+    LEARNINGS_TDD)    echo "Capture learnings → .claude/ship-learnings/tdd.md" ;;
+    LEARNINGS_REVIEW) echo "Capture learnings → .claude/ship-learnings/review.md" ;;
+    LEARNINGS_TEST)   echo "Capture learnings → .claude/ship-learnings/test.md" ;;
+    LEARNINGS_VERIFY) echo "Capture learnings → .claude/ship-learnings/verify.md" ;;
+    LEARNINGS_EVAL)   echo "Capture learnings → .claude/ship-learnings/eval.md" ;;
     *)       echo "$1" ;;
   esac
 }
@@ -395,8 +402,13 @@ EOF
   esac
 
   CAPTURE_MSG=""
+  LEARNING_GATE=""
   if [[ "$IS_PHASE_END" == "true" && -n "$LEARNING_FILE" ]]; then
-    CAPTURE_MSG="\\n\\n[AUTO-LEARN] Phase complete. CAPTURE learnings now:\\n  1. Read .claude/ship-learnings/${LEARNING_FILE}.md FIRST (check existing entries)\\n  2. If same root cause exists: UPDATE its Seen count + date. Do NOT duplicate.\\n  3. If new learning: append new entry with takeaway as heading.\\n  4. If clean pass with no issues: write NOTHING.\\n  5. If file exceeds ~20 entries: consolidate related learnings into broader rules."
+    # Map learning file to gate name
+    GATE_NAME=$(echo "$LEARNING_FILE" | tr '[:lower:]' '[:upper:]')
+    LEARNING_GATE="LEARNINGS_${GATE_NAME}"
+
+    CAPTURE_MSG="\\n\\n[AUTO-LEARN] HARD GATE: You MUST capture learnings before the next phase can start.\\n  The next phase is BLOCKED until you record LEARNINGS_${GATE_NAME}=done in the state file.\\n\\n  Steps:\\n  1. Read .claude/ship-learnings/${LEARNING_FILE}.md FIRST (check existing entries)\\n  2. If same root cause exists: UPDATE its Seen count + date. Do NOT duplicate.\\n  3. If new learning: append new entry with takeaway as heading.\\n  4. If clean pass with no issues: you may skip writing content, but still record the gate.\\n  5. If file exceeds ~20 entries: consolidate related learnings into broader rules.\\n  6. MANDATORY: echo 'LEARNINGS_${GATE_NAME}=done' >> .ship-pipeline-state"
   fi
 
   # Build summary prompt based on step type

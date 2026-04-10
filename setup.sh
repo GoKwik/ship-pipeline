@@ -404,20 +404,27 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T8: 1A done → Skill tdd blocked (1B missing)" "deny" \
     '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
 
-  # ── Phase 1A + 1B done ──
+  # ── Phase 1A + 1B done, but no learnings captured ──
   echo "STEP_1B=done" >> .ship-pipeline-state
 
   run_test "T9: 1A+1B done → Edit source allowed (can code now)" "allow" \
     '{"tool_name":"Edit","tool_input":{"file_path":"src/lib/foo.ts"}}' "pre"
 
-  run_test "T10: 1A+1B done → Skill tdd allowed" "allow" \
+  run_test "T10: 1A+1B done but no LEARNINGS_PLAN → tdd blocked" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
+
+  # ── Learnings captured → tdd allowed ──
+  echo "LEARNINGS_PLAN=done" >> .ship-pipeline-state
+
+  run_test "T10b: 1A+1B+LEARNINGS_PLAN → tdd allowed" "allow" \
     '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
 
   run_test "T11: 1A+1B done → Skill verify blocked (needs Phase 2+3)" "deny" \
     '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
 
-  # ── Phase 2 done, review fix-retry ──
+  # ── Phase 2 done, learnings captured, review fix-retry ──
   echo "STEP_2=done" >> .ship-pipeline-state
+  echo "LEARNINGS_TDD=done" >> .ship-pipeline-state
   echo "STEP_3A=done" >> .ship-pipeline-state
 
   run_test "T12: Review fix-retry → Edit source allowed" "allow" \
@@ -434,9 +441,12 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T15: PostToolUse records step" "record" \
     '{"tool_name":"Skill","tool_input":{"skill":"prp-plan"}}' "post"
 
-  # ── All phases done, allow state file deletion ──
+  # ── All phases done (including all learning gates), allow state file deletion ──
   for step in STEP_3B STEP_3C STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B; do
     echo "${step}=done" >> .ship-pipeline-state
+  done
+  for gate in LEARNINGS_REVIEW LEARNINGS_TEST LEARNINGS_VERIFY LEARNINGS_EVAL LEARNINGS_DELIVER; do
+    echo "${gate}=done" >> .ship-pipeline-state
   done
 
   run_test "T16: All phases done → rm .ship-pipeline-state allowed" "allow" \
