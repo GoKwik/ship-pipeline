@@ -271,12 +271,15 @@ Merge findings from all 3 reviewers. For each finding:
 
 ### RECALL: Read `.claude/ship-learnings/test.md` before starting. Watch for previously flaky tests or known timing issues.
 
-### Step 4A: Regression Tests
+### Step 4A: Regression Tests + Coverage Re-check
 
-Run the project's full test suite:
+Run the project's full test suite **with coverage** to catch coverage drops from Phase 3 review fixes:
 ```bash
-npm test
+# Detect test runner and run with coverage
+npm test -- --coverage 2>/dev/null || npx jest --coverage 2>/dev/null || npx vitest run --coverage 2>/dev/null || npm test
 ```
+
+After tests pass, verify coverage is still >= 80%. If it dropped (due to new code from review fixes), write tests for uncovered paths.
 
 ### Step 4B: E2E Tests
 
@@ -292,13 +295,19 @@ If any test fails:
 3. Fix the root cause
 4. Re-run the FULL test suite (not just the failing test)
 
+If coverage dropped below 80%:
+1. Identify uncovered lines from Phase 3 fixes
+2. Write targeted tests
+3. Re-run with coverage
+
 ### Gate: Phase 4 Complete When
 
 - [ ] All unit/integration tests pass
 - [ ] All E2E tests pass
 - [ ] No regressions in existing functionality
+- [ ] Coverage >= 80% (or documented reason if tooling unavailable)
 
-### CAPTURE: Append learnings to `.claude/ship-learnings/test.md`. Note flaky tests, timing issues, and environment-specific failures.
+### CAPTURE: Append learnings to `.claude/ship-learnings/test.md`. Note flaky tests, timing issues, environment-specific failures, and coverage drops from review fixes.
 
 ---
 

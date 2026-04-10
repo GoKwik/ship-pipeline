@@ -415,7 +415,7 @@ EOF
     STEP_3C)
       SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_3C_SUMMARY=<N> P0, <N> P1, <N> P2 findings | <key finding or clean>' >> .ship-pipeline-state" ;;
     STEP_4B)
-      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_4B_SUMMARY=<N> E2E tests passed | <N> flows covered' >> .ship-pipeline-state" ;;
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_4B_SUMMARY=<N> E2E tests passed | coverage <N>% (was <N>% in TDD) | <N> flows covered' >> .ship-pipeline-state" ;;
     STEP_5A)
       SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_5A_SUMMARY=build <ok|fail> | types <ok|N errors> | lint <ok|N errors>' >> .ship-pipeline-state" ;;
     STEP_5B)

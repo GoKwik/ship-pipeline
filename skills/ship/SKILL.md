@@ -365,12 +365,30 @@ Merge findings from all 3 reviewers. For each finding:
 
 ### RECALL: Read `.claude/ship-learnings/test.md` before starting. Watch for previously flaky tests or known timing issues.
 
-### Step 4A: Regression Tests
+### Step 4A: Regression Tests + Coverage Re-check
 
-Run the project's full test suite:
+Run the project's full test suite **with coverage**:
 ```bash
-npm test
+# Detect test runner and run with coverage
+if [[ -f "package.json" ]]; then
+  # Try common coverage commands in order
+  npm test -- --coverage 2>/dev/null || npx jest --coverage 2>/dev/null || npx vitest run --coverage 2>/dev/null || npm test
+elif [[ -f "pyproject.toml" ]] || [[ -f "setup.py" ]]; then
+  pytest --cov --cov-report=term-missing 2>/dev/null || python -m pytest --cov 2>/dev/null || pytest
+elif [[ -f "go.mod" ]]; then
+  go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out
+elif [[ -f "Cargo.toml" ]]; then
+  cargo llvm-cov --summary-only 2>/dev/null || cargo test
+fi
 ```
+
+**After tests pass, check coverage:**
+
+Compare current coverage against the Phase 2 (TDD) baseline. Phase 3 review fixes and Phase 5 verify fixes can add code without tests — this gate catches that.
+
+- If coverage dropped below 80%: identify uncovered lines from review/verify fixes, write tests for them, re-run.
+- If coverage is at or above 80%: proceed.
+- If the project has no coverage tooling: note it and proceed (don't block on missing tooling).
 
 ### Step 4B: E2E Tests
 
@@ -386,13 +404,19 @@ If any test fails:
 3. Fix the root cause
 4. Re-run the FULL test suite (not just the failing test)
 
+If coverage dropped below 80%:
+1. Identify which files/functions lost coverage (new code from Phase 3 fixes)
+2. Write targeted tests for uncovered paths
+3. Re-run with coverage to verify >= 80%
+
 ### Gate: Phase 4 Complete When
 
 - [ ] All unit/integration tests pass
 - [ ] All E2E tests pass
 - [ ] No regressions in existing functionality
+- [ ] Coverage >= 80% (or documented reason if tooling unavailable)
 
-### CAPTURE: Append learnings to `.claude/ship-learnings/test.md`. Note flaky tests, timing issues, and environment-specific failures.
+### CAPTURE: Append learnings to `.claude/ship-learnings/test.md`. Note flaky tests, timing issues, environment-specific failures, and coverage drops from review fixes.
 
 ---
 
