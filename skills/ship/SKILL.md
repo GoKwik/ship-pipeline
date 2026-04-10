@@ -156,7 +156,7 @@ If learnings exist, incorporate them into your approach for this phase. For exam
 2. **Compare** your current phase outcome against existing entries:
    - **Same root cause already exists?** → Update the existing entry: increment its `**Seen:**` count and add the new date. Do NOT add a duplicate entry.
    - **New learning?** → Append a new entry.
-   - **Clean pass, no issues?** → Do NOT write anything. Only write when there's something to learn.
+   - **Clean pass, no issues?** → Write a brief entry noting what went right — the approach that worked, the pattern that avoided past issues. Success is a learning too.
 3. **Consolidate** if the file has grown past ~20 entries: merge related learnings into broader rules, remove entries that are now obvious or covered by a broader rule.
 
 #### Entry Format (new learning):
@@ -212,7 +212,7 @@ If `verify.md` has 3 separate entries about missing type packages, merge into:
 |------|-----|
 | Never blindly append | Prevents duplicate dumping |
 | Read before writing | You need existing entries to compare against |
-| No "clean pass" entries | They add noise without learning value |
+| Every phase writes something | Even clean passes record what worked — future runs repeat success |
 | Consolidate at ~20 entries | Keeps the file scannable and useful as context |
 | Takeaway is the heading | Makes scanning fast — headings are the rules |
 | Track seen count | High-count entries are the most important learnings |

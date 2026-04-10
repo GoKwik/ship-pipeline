@@ -87,7 +87,7 @@ Every `/ship` run captures learnings and feeds them back into future runs. Not o
 2. **Compare** against existing entries:
    - Same root cause already exists → update its `**Seen:**` count + date. No duplicate.
    - New learning → append new entry.
-   - Clean pass, no issues → write nothing.
+   - Clean pass, no issues → write a brief entry noting what went right (approach that worked, pattern that avoided past issues).
 3. **Consolidate** if file exceeds ~20 entries: merge related learnings into broader rules.
 
 Entry format:
