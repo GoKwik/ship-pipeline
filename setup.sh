@@ -236,6 +236,28 @@ else
   fi
 fi
 
+# Install ALL commands to ~/.claude/commands/ (not just /ship)
+if ! $CHECK_ONLY; then
+  COMMANDS_INSTALL_DIR="${HOME}/.claude/commands"
+  mkdir -p "${COMMANDS_INSTALL_DIR}"
+  for cmd_file in "${SCRIPT_DIR}/commands/"*.md; do
+    cmd_name=$(basename "$cmd_file")
+    dst="${COMMANDS_INSTALL_DIR}/${cmd_name}"
+    if [ -f "$dst" ]; then
+      SRC_SZ=$(wc -c < "$cmd_file" 2>/dev/null || echo "0")
+      DST_SZ=$(wc -c < "$dst" 2>/dev/null || echo "0")
+      if [ "$SRC_SZ" != "$DST_SZ" ]; then
+        cp "$cmd_file" "$dst"
+        info "Updated ${cmd_name}"
+      fi
+    else
+      cp "$cmd_file" "$dst"
+      info "Installed ${cmd_name}"
+    fi
+  done
+  pass "All commands installed to ${COMMANDS_INSTALL_DIR}/"
+fi
+
 # ─────────────────────────────────────────────────────────────
 # Check 6: Pipeline enforcement hooks
 # ─────────────────────────────────────────────────────────────
