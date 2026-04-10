@@ -154,6 +154,11 @@ step_name() {
   esac
 }
 
+# ── Read step summary (rich metadata) ──
+step_summary() {
+  grep "^${1}_SUMMARY=" "$STATE_FILE" 2>/dev/null | sed "s/^${1}_SUMMARY=//" | head -1
+}
+
 # ── Build progress header ──
 build_progress() {
   local ALL_STEPS="STEP_1A STEP_1B STEP_2 STEP_3A STEP_3B STEP_3C STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B"
@@ -177,10 +182,17 @@ build_progress() {
       STEP_7B) name="7B PR" ;;
     esac
 
+    local summary
+    summary=$(step_summary "$step")
+
     if grep -q "^${step}=skipped$" "$STATE_FILE" 2>/dev/null; then
       header="${header}  [SKIP] ${name}  (user approved)\\n"
     elif step_done "$step"; then
-      header="${header}  [DONE] ${name}\\n"
+      if [[ -n "$summary" ]]; then
+        header="${header}  [DONE] ${name}  — ${summary}\\n"
+      else
+        header="${header}  [DONE] ${name}\\n"
+      fi
     elif [[ "$step" == "$1" ]]; then
       header="${header}  [ >> ] ${name}  <-- current\\n"
     else
@@ -387,11 +399,42 @@ EOF
     CAPTURE_MSG="\\n\\n[AUTO-LEARN] Phase complete. CAPTURE learnings now:\\n  1. Read .claude/ship-learnings/${LEARNING_FILE}.md FIRST (check existing entries)\\n  2. If same root cause exists: UPDATE its Seen count + date. Do NOT duplicate.\\n  3. If new learning: append new entry with takeaway as heading.\\n  4. If clean pass with no issues: write NOTHING.\\n  5. If file exceeds ~20 entries: consolidate related learnings into broader rules."
   fi
 
+  # Build summary prompt based on step type
+  SUMMARY_PROMPT=""
+  case "$CURRENT_STEP" in
+    STEP_1A)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_1A_SUMMARY=<N> tasks, <M> acceptance criteria' >> .ship-pipeline-state" ;;
+    STEP_1B)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_1B_SUMMARY=<N> findings (<P0> P0, <P1> P1) | <N> iterations | <All resolved | N unresolved>' >> .ship-pipeline-state" ;;
+    STEP_2)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_2_SUMMARY=<N> tests, <M>% coverage | <N> RED-GREEN-REFACTOR cycles' >> .ship-pipeline-state" ;;
+    STEP_3A)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_3A_SUMMARY=<N> P0, <N> P1, <N> P2 findings | <key finding or clean>' >> .ship-pipeline-state" ;;
+    STEP_3B)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_3B_SUMMARY=<N> P0, <N> P1, <N> P2 findings | <key finding or clean>' >> .ship-pipeline-state" ;;
+    STEP_3C)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_3C_SUMMARY=<N> P0, <N> P1, <N> P2 findings | <key finding or clean>' >> .ship-pipeline-state" ;;
+    STEP_4B)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_4B_SUMMARY=<N> E2E tests passed | <N> flows covered' >> .ship-pipeline-state" ;;
+    STEP_5A)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_5A_SUMMARY=build <ok|fail> | types <ok|N errors> | lint <ok|N errors>' >> .ship-pipeline-state" ;;
+    STEP_5B)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_5B_SUMMARY=<N> breakpoints | <N> console errors | a11y <ok|N issues>' >> .ship-pipeline-state" ;;
+    STEP_5C)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_5C_SUMMARY=<platform> | <N> tests passed | <key result>' >> .ship-pipeline-state" ;;
+    STEP_6)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_6_SUMMARY=<N>/<M> acceptance criteria satisfied | <N> code graders, <N> model graders' >> .ship-pipeline-state" ;;
+    STEP_7A)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_7A_SUMMARY=<commit hash short> | <N> files changed' >> .ship-pipeline-state" ;;
+    STEP_7B)
+      SUMMARY_PROMPT="\\n\\n[PROGRESS SUMMARY] Write a one-line summary to .ship-pipeline-state:\\n  echo 'STEP_7B_SUMMARY=<PR URL or PR #>' >> .ship-pipeline-state" ;;
+  esac
+
   cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PostToolUse",
-    "additionalContext": "[SHIP GATE] ${CURRENT_NAME} recorded as COMPLETE.\\n${PROGRESS}\\nDisplay the progress header above to the user.${CAPTURE_MSG}"
+    "additionalContext": "[SHIP GATE] ${CURRENT_NAME} recorded as COMPLETE.\\n${PROGRESS}\\nDisplay the progress header above to the user.${CAPTURE_MSG}${SUMMARY_PROMPT}"
   }
 }
 EOF
