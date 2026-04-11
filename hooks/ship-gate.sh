@@ -125,12 +125,12 @@ get_prereqs() {
     STEP_3B) echo "STEP_2 LEARNINGS_TDD" ;;
     STEP_3C) echo "STEP_2 LEARNINGS_TDD" ;;
     STEP_4B) echo "STEP_3A STEP_3B LEARNINGS_REVIEW" ;;
-    STEP_5A) echo "STEP_3A STEP_3B LEARNINGS_REVIEW" ;;
+    STEP_5A) echo "STEP_4B LEARNINGS_TEST" ;;
     STEP_5B) echo "STEP_5A" ;;
     STEP_5C) echo "STEP_5A" ;;
     STEP_6)  echo "STEP_5A STEP_5C LEARNINGS_VERIFY" ;;
     STEP_7A) echo "STEP_6 LEARNINGS_EVAL" ;;
-    STEP_7B) echo "STEP_7A" ;;
+    STEP_7B) echo "STEP_7A LEARNINGS_DELIVER" ;;
     *)       echo "" ;;
   esac
 }

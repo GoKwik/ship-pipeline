@@ -1,0 +1,20 @@
+# /ship pipeline runtime state
+.ship-pipeline-state
+.ship-1b-verdict
+
+# Ship learnings and logs (per-session, not distributable)
+.claude/ship-learnings/
+.claude/ship-logs/
+
+# Product review runtime state (per-installation)
+.claude/product-review/CONTEXT.md
+.claude/product-review/TECH-REVIEW.md
+.claude/product-review/FEATURES-REVIEW.md
+.claude/product-review/BRIEF.md
+.claude/product-review/HISTORY.md
+.claude/product-review/state.json
+.claude/product-review/config.json
+.claude/product-review/.context-hash
+
+# Local command copies (installed by setup.sh, not source)
+.claude/commands/

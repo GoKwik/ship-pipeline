@@ -455,6 +455,24 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T13: 3A done → Skill security-review allowed (parallel with 3A)" "allow" \
     '{"tool_name":"Skill","tool_input":{"skill":"security-review"}}' "pre"
 
+  # ── Phase 4/5 ordering: verify blocked without STEP_4B + LEARNINGS_TEST ──
+  echo "STEP_3B=done" >> .ship-pipeline-state
+  echo "STEP_3C=done" >> .ship-pipeline-state
+  echo "LEARNINGS_REVIEW=done" >> .ship-pipeline-state
+
+  run_test "T13b: Verify blocked without STEP_4B" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
+
+  echo "STEP_4B=done" >> .ship-pipeline-state
+
+  run_test "T13c: Verify blocked without LEARNINGS_TEST" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
+
+  echo "LEARNINGS_TEST=done" >> .ship-pipeline-state
+
+  run_test "T13d: STEP_4B+LEARNINGS_TEST done → verify allowed" "allow" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
+
   # ── Block state file deletion mid-pipeline ──
   run_test "T14: rm .ship-pipeline-state mid-pipeline → blocked" "deny" \
     '{"tool_name":"Bash","tool_input":{"command":"rm -f .ship-pipeline-state"}}' "pre"
@@ -464,10 +482,11 @@ if [ -x "${HOOK_SCRIPT}" ]; then
     '{"tool_name":"Skill","tool_input":{"skill":"prp-plan"}}' "post"
 
   # ── All phases done (including all learning gates), allow state file deletion ──
-  for step in STEP_3B STEP_3C STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B; do
+  # Note: STEP_3B, STEP_3C, STEP_4B, LEARNINGS_REVIEW, LEARNINGS_TEST already set above
+  for step in STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B; do
     echo "${step}=done" >> .ship-pipeline-state
   done
-  for gate in LEARNINGS_REVIEW LEARNINGS_TEST LEARNINGS_VERIFY LEARNINGS_EVAL LEARNINGS_DELIVER; do
+  for gate in LEARNINGS_VERIFY LEARNINGS_EVAL LEARNINGS_DELIVER; do
     echo "${gate}=done" >> .ship-pipeline-state
   done
 
