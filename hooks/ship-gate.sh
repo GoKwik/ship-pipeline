@@ -101,8 +101,45 @@ is_mobile_app() {
   grep -q "^MOBILE_APP=true$" "$STATE_FILE" 2>/dev/null
 }
 
+# ── Check if learning capture is complete for a phase ──
+# Requires BOTH: marker in state file AND actual file content change
+# (new heading since baseline OR an existing **Seen:** line updated today).
+learnings_gate_met() {
+  local phase="$1"  # PLAN, TDD, REVIEW, TEST, VERIFY, EVAL, DELIVER
+  local phase_lower
+  phase_lower=$(echo "$phase" | tr '[:upper:]' '[:lower:]')
+  local file=".claude/ship-learnings/${phase_lower}.md"
+  local today
+  today=$(date +%Y-%m-%d)
+
+  # Marker must exist in state
+  grep -qE "^LEARNINGS_${phase}=(done|skipped)$" "$STATE_FILE" 2>/dev/null || return 1
+
+  # Skipped counts as met (user-approved skip)
+  grep -qE "^LEARNINGS_${phase}=skipped$" "$STATE_FILE" 2>/dev/null && return 0
+
+  # Condition A: heading count grew since init
+  local baseline
+  baseline=$(grep "^${phase}_BASELINE_HEADINGS=" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+  local current
+  current=$(grep -c "^### " "$file" 2>/dev/null || echo 0)
+  if [[ "$current" -gt "${baseline:-0}" ]]; then
+    return 0
+  fi
+
+  # Condition B: an existing **Seen:** line contains today's date
+  grep -qE "^\*\*Seen:\*\*.*${today}" "$file" 2>/dev/null && return 0
+
+  return 1
+}
+
 # ── Check if a step is recorded as done (or user-approved skip) ──
 step_done() {
+  # LEARNINGS_* prereqs use content-verified gate
+  if [[ "$1" == LEARNINGS_* ]]; then
+    learnings_gate_met "${1#LEARNINGS_}"
+    return $?
+  fi
   grep -qE "^$1=(done|skipped)$" "$STATE_FILE" 2>/dev/null
 }
 
