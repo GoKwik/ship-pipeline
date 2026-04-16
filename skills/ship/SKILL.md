@@ -42,6 +42,17 @@ for phase in plan tdd review test verify eval deliver; do
     echo "Learnings are auto-captured after each /ship run. Read before starting the phase." >> ".claude/ship-learnings/${phase}.md"
     echo "" >> ".claude/ship-learnings/${phase}.md"
   fi
+  # Snapshot heading count so the hook can detect new learnings captured during this run.
+  # Reset on every init: a re-run is a new pipeline instance expecting its own learning.
+  headings=$(grep -c "^### " ".claude/ship-learnings/${phase}.md" 2>/dev/null || true)
+  headings=${headings:-0}
+  phase_upper=$(echo "$phase" | tr '[:lower:]' '[:upper:]')
+  # Remove any stale baseline line, then write the fresh one
+  if [[ -f .ship-pipeline-state ]]; then
+    sed -i.bak "/^${phase_upper}_BASELINE_HEADINGS=/d" .ship-pipeline-state
+    rm -f .ship-pipeline-state.bak
+  fi
+  echo "${phase_upper}_BASELINE_HEADINGS=${headings}" >> .ship-pipeline-state
 done
 ```
 
