@@ -493,6 +493,42 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T16: All phases done → rm .ship-pipeline-state allowed" "allow" \
     '{"tool_name":"Bash","tool_input":{"command":"rm -f .ship-pipeline-state"}}' "pre"
 
+  # ── T17: RECALL auto-injects learning content ──
+  # Seed a tdd.md learning file; set state so STEP_2 (first step of TDD phase)
+  # invocation has its prereqs met. The PRE-hook for STEP_2 should embed the
+  # learning file content into additionalContext.
+  rm -f .ship-pipeline-state
+  cat > .ship-pipeline-state <<'EOSTATE'
+STEP_1A=done
+STEP_1B=done
+LEARNINGS_PLAN=done
+PLAN_BASELINE_HEADINGS=0
+TDD_BASELINE_HEADINGS=0
+EOSTATE
+  # Ensure LEARNINGS_PLAN gate clears via a new heading (Condition A)
+  mkdir -p .claude/ship-learnings
+  echo "### plan phase had a learning" > .claude/ship-learnings/plan.md
+  cat > .claude/ship-learnings/tdd.md <<'TDDMD'
+# /ship Learnings — tdd phase
+
+### Avoid flaky setTimeout mocks in React tests
+
+**Seen:** 1x — 2026-04-10
+**Category:** test-flake
+**Example:** jest.useFakeTimers broke because of React 18 batching
+**Resolution pattern:** Use jest.advanceTimersByTimeAsync + await
+TDDMD
+
+  TESTS_TOTAL=$((TESTS_TOTAL + 1))
+  RESULT=$(echo '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' | "${HOOK_SCRIPT}" pre 2>&1)
+  if echo "$RESULT" | grep -q "Avoid flaky setTimeout mocks"; then
+    pass "T17: RECALL injects learning file content into additionalContext"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    fail "T17: RECALL did not inject learning file content (got: ${RESULT:0:200})"
+    ERRORS=$((ERRORS + 1))
+  fi
+
   info "${TESTS_PASSED}/${TESTS_TOTAL} tests passed"
 
   # Cleanup

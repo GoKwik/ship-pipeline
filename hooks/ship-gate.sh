@@ -344,8 +344,9 @@ EOF
     exit 0
   fi
 
-  # ── PRE: RECALL reminder — read learnings before starting phase ──
-  # Only remind on the FIRST step of each phase
+  # ── PRE: RECALL — inject learnings file content into Claude's context ──
+  # Fires on the FIRST step of each phase. Content is embedded in additionalContext
+  # so Claude cannot miss past lessons. 200-line cap prevents runaway growth.
   RECALL_FILE=""
   case "$CURRENT_STEP" in
     STEP_1A) RECALL_FILE="plan" ;;
@@ -358,14 +359,28 @@ EOF
   esac
 
   if [[ -n "$RECALL_FILE" && -f ".claude/ship-learnings/${RECALL_FILE}.md" ]]; then
-    LEARNING_LINES=$(wc -l < ".claude/ship-learnings/${RECALL_FILE}.md" 2>/dev/null || echo "0")
-    if [[ "$LEARNING_LINES" -gt 4 ]]; then
-      # File has content beyond the header — remind to read it
+    LEARNING_HEADINGS=$(grep -c "^### " ".claude/ship-learnings/${RECALL_FILE}.md" 2>/dev/null || true)
+    LEARNING_HEADINGS=${LEARNING_HEADINGS:-0}
+    if [[ "$LEARNING_HEADINGS" -gt 0 ]]; then
+      # Read up to 200 lines of the learning file
+      LEARNING_CONTENT=$(head -200 ".claude/ship-learnings/${RECALL_FILE}.md")
+      TOTAL_LINES=$(wc -l < ".claude/ship-learnings/${RECALL_FILE}.md" 2>/dev/null || echo 0)
+      TRUNCATION_NOTE=""
+      if [[ "$TOTAL_LINES" -gt 200 ]]; then
+        TRUNCATION_NOTE="\\n\\n[... truncated at 200 lines, read full file .claude/ship-learnings/${RECALL_FILE}.md for remaining entries ...]"
+      fi
+
+      # JSON-escape the learning content (escape backslashes, double quotes, newlines, tabs, carriage returns)
+      ESCAPED_CONTENT=$(printf '%s' "$LEARNING_CONTENT" | jq -Rs .)
+      # Strip surrounding quotes jq adds; we're embedding into a larger JSON string below
+      ESCAPED_CONTENT=${ESCAPED_CONTENT#\"}
+      ESCAPED_CONTENT=${ESCAPED_CONTENT%\"}
+
       cat <<EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "additionalContext": "[AUTO-LEARN] RECALL: Read .claude/ship-learnings/${RECALL_FILE}.md before proceeding. It contains learnings from previous /ship runs that should inform this phase."
+    "additionalContext": "[AUTO-LEARN] RECALL for ${RECALL_FILE} phase — apply these past learnings, do NOT repeat the mistakes below:\\n\\n${ESCAPED_CONTENT}${TRUNCATION_NOTE}\\n\\n---\\nUse each entry's 'Resolution pattern' as a pre-check before proceeding."
   }
 }
 EOF
