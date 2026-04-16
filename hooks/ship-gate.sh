@@ -120,9 +120,10 @@ learnings_gate_met() {
 
   # Condition A: heading count grew since init
   local baseline
-  baseline=$(grep "^${phase}_BASELINE_HEADINGS=" "$STATE_FILE" 2>/dev/null | cut -d= -f2)
+  baseline=$(grep "^${phase}_BASELINE_HEADINGS=" "$STATE_FILE" 2>/dev/null | tail -1 | cut -d= -f2)
   local current
-  current=$(grep -c "^### " "$file" 2>/dev/null || echo 0)
+  current=$(grep -c "^### " "$file" 2>/dev/null)
+  current=${current:-0}
   if [[ "$current" -gt "${baseline:-0}" ]]; then
     return 0
   fi
