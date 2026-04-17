@@ -1,26 +1,21 @@
 ---
-name: ship
-description: "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver. One command with hard quality gates and fix-retry loops. Requires ECC + Codex plugins."
-origin: custom
-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, Skill
+description: "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver with hard quality gates"
+argument-hint: "<task description>"
 ---
 
 # /ship — Full-Cycle Shipping Pipeline
 
 One command to take a task from idea to merged PR with deterministic quality enforcement at every step.
 
-## When to Activate
-
-- User says `/ship <task description>`
-- User wants to implement a feature end-to-end with quality gates
-- User wants a deterministic, no-compromise shipping workflow
+The task to implement:
+`$ARGUMENTS`
 
 ## Pipeline State Initialization
 
 **MANDATORY FIRST ACTION:** Before anything else, initialize the pipeline state file:
 ```bash
 echo "# /ship pipeline state — $(date -Iseconds)" > .ship-pipeline-state
-echo "# Task: <task description>" >> .ship-pipeline-state
+echo "# Task: $ARGUMENTS" >> .ship-pipeline-state
 
 # Auto-detect mobile app project
 IS_MOBILE=false
@@ -42,17 +37,6 @@ for phase in plan tdd review test verify eval deliver; do
     echo "Learnings are auto-captured after each /ship run. Read before starting the phase." >> ".claude/ship-learnings/${phase}.md"
     echo "" >> ".claude/ship-learnings/${phase}.md"
   fi
-  # Snapshot heading count so the hook can detect new learnings captured during this run.
-  # Reset on every init: a re-run is a new pipeline instance expecting its own learning.
-  headings=$(grep -c "^### " ".claude/ship-learnings/${phase}.md" 2>/dev/null || true)
-  headings=${headings:-0}
-  phase_upper=$(echo "$phase" | tr '[:lower:]' '[:upper:]')
-  # Remove any stale baseline line, then write the fresh one
-  if [[ -f .ship-pipeline-state ]]; then
-    sed -i.bak "/^${phase_upper}_BASELINE_HEADINGS=/d" .ship-pipeline-state
-    rm -f .ship-pipeline-state.bak
-  fi
-  echo "${phase_upper}_BASELINE_HEADINGS=${headings}" >> .ship-pipeline-state
 done
 ```
 
@@ -68,7 +52,7 @@ Both plugins must be installed and configured:
 If either is missing, stop immediately:
 ```
 HARD STOP: Missing prerequisites.
-Run the setup script: bash /path/to/ship-pipeline/setup.sh
+Run the setup script: bash ~/Code/ship-pipeline/setup.sh
 ```
 
 ---
@@ -86,6 +70,37 @@ Phase 5: VERIFY        → build + lint + types + UI spot-check + native simulat
 Phase 6: EVAL          → acceptance criteria validation
 Phase 7: DELIVER       → commit + PR
 ```
+
+---
+
+## Auto-Learning System
+
+Every `/ship` run captures learnings and feeds them back into future runs. Not optional.
+
+### Storage: `.claude/ship-learnings/` — one file per phase (`plan.md`, `tdd.md`, `review.md`, `test.md`, `verify.md`, `eval.md`, `deliver.md`)
+
+### Before Each Phase (RECALL): Read the corresponding learnings file and incorporate past lessons into your approach.
+
+### After Each Phase (CAPTURE): Do NOT blindly append. Follow this protocol:
+
+1. **Read** the existing learnings file first
+2. **Compare** against existing entries:
+   - Same root cause already exists → update its `**Seen:**` count + date. No duplicate.
+   - New learning → append new entry.
+   - Clean pass, no issues → write a brief entry noting what went right (approach that worked, pattern that avoided past issues).
+3. **Consolidate** if file exceeds ~20 entries: merge related learnings into broader rules.
+
+Entry format:
+```markdown
+### <takeaway as a concise rule>
+
+**Seen:** <count>x — <dates>
+**Category:** <type-error | import | race-condition | security | config | test-flake | etc.>
+**Example:** <most recent concrete example>
+**Resolution pattern:** <what to do when you see this>
+```
+
+Rules: never blindly append, read before writing, no clean-pass entries, takeaway is the heading, track seen count. See SKILL.md for full dedup/consolidation examples.
 
 ---
 
@@ -127,126 +142,6 @@ if still failing after 3 attempts:
 
 ---
 
-## Auto-Learning System
-
-Every `/ship` run captures learnings and feeds them back into future runs. This is not optional — it's baked into every phase.
-
-### Storage
-
-```
-.claude/ship-learnings/
-├── plan.md          ← Phase 1 learnings
-├── tdd.md           ← Phase 2 learnings
-├── review.md        ← Phase 3 learnings
-├── test.md          ← Phase 4 learnings
-├── verify.md        ← Phase 5 learnings
-├── eval.md          ← Phase 6 learnings
-└── deliver.md       ← Phase 7 learnings
-```
-
-### Before Each Phase: RECALL
-
-**MANDATORY** — Before starting any phase, read the corresponding learnings file:
-```bash
-cat .claude/ship-learnings/<phase>.md 2>/dev/null || true
-```
-
-If learnings exist, incorporate them into your approach for this phase. For example:
-- **Plan phase** reads `plan.md` → avoids repeating past design mistakes
-- **Review phase** reads `review.md` → checks for recurring review findings
-- **Verify phase** reads `verify.md` → pre-fixes known build/lint patterns
-- **TDD phase** reads `tdd.md` → writes better tests based on past failures
-
-### After Each Phase: CAPTURE
-
-**MANDATORY** — After every phase completes, update the learnings file. This is NOT a blind append — you must deduplicate and consolidate.
-
-#### CAPTURE Protocol (follow exactly):
-
-1. **Read** the existing `.claude/ship-learnings/<phase>.md` file first
-2. **Compare** your current phase outcome against existing entries:
-   - **Same root cause already exists?** → Update the existing entry: increment its `**Seen:**` count and add the new date. Do NOT add a duplicate entry.
-   - **New learning?** → Append a new entry.
-   - **Clean pass, no issues?** → Write a brief entry noting what went right — the approach that worked, the pattern that avoided past issues. Success is a learning too.
-3. **Consolidate** if the file has grown past ~20 entries: merge related learnings into broader rules, remove entries that are now obvious or covered by a broader rule.
-
-#### Entry Format (new learning):
-
-```markdown
-### <takeaway as a concise rule>
-
-**Seen:** <count>x — <dates>
-**Category:** <root-cause category: type-error | import | race-condition | security | config | test-flake | etc.>
-**Example:** <most recent concrete example>
-**Resolution pattern:** <what to do when you see this>
-```
-
-#### Dedup Example:
-
-If `review.md` already contains:
-```markdown
-### Always use parameterized queries for database access
-
-**Seen:** 1x — 2026-04-05
-**Category:** security
-**Example:** String interpolation in profile lookup → SQL injection flagged
-**Resolution pattern:** Use $1/$2 placeholders, never template literals for SQL
-```
-
-And the same issue appears again on 2026-04-10, **update the existing entry**:
-```markdown
-### Always use parameterized queries for database access
-
-**Seen:** 2x — 2026-04-05, 2026-04-10
-**Category:** security
-**Example:** Raw SQL in report generator → injection flagged (2026-04-10)
-**Resolution pattern:** Use $1/$2 placeholders, never template literals for SQL
-```
-
-Do NOT add a second entry for the same root cause.
-
-#### Consolidation Example:
-
-If `verify.md` has 3 separate entries about missing type packages, merge into:
-```markdown
-### Verify type packages are in dependencies (not devDependencies) when imported in source
-
-**Seen:** 3x — 2026-04-06, 2026-04-08, 2026-04-12
-**Category:** type-error
-**Example:** @types/chart.js, @types/lodash, @types/node all failed build when in devDeps
-**Resolution pattern:** After `npm install <pkg>`, check if `@types/<pkg>` needs to be in dependencies
-```
-
-#### Rules:
-
-| Rule | Why |
-|------|-----|
-| Never blindly append | Prevents duplicate dumping |
-| Read before writing | You need existing entries to compare against |
-| Every phase writes something | Even clean passes record what worked — future runs repeat success |
-| Consolidate at ~20 entries | Keeps the file scannable and useful as context |
-| Takeaway is the heading | Makes scanning fast — headings are the rules |
-| Track seen count | High-count entries are the most important learnings |
-
-### Initialization
-
-On first `/ship` run, create the directory and empty learning files:
-```bash
-mkdir -p .claude/ship-learnings
-for phase in plan tdd review test verify eval deliver; do
-  if [[ ! -f ".claude/ship-learnings/${phase}.md" ]]; then
-    echo "# /ship Learnings — ${phase^} Phase" > ".claude/ship-learnings/${phase}.md"
-    echo "" >> ".claude/ship-learnings/${phase}.md"
-    echo "Learnings are auto-captured after each /ship run. Read before starting the phase." >> ".claude/ship-learnings/${phase}.md"
-    echo "" >> ".claude/ship-learnings/${phase}.md"
-  fi
-done
-```
-
-Add this to the Pipeline State Initialization block (runs once at pipeline start).
-
----
-
 ## Phase 1: PLAN
 
 **Purpose:** Design the implementation and stress-test the approach before writing any code.
@@ -255,7 +150,7 @@ Add this to the Pipeline State Initialization block (runs once at pipeline start
 
 ### Step 1A: Create Implementation Plan
 
-Invoke: `/everything-claude-code:prp-plan <task description>`
+Invoke: `/everything-claude-code:prp-plan $ARGUMENTS`
 
 This produces:
 - Requirements restatement
@@ -303,7 +198,7 @@ If the adversarial review surfaces legitimate design flaws:
 
 Invoke: `/everything-claude-code:tdd`
 
-This enforces:
+Follow the TDD workflow using the plan from Phase 1:
 1. Write failing tests FIRST (RED)
 2. Implement minimal code to make tests pass (GREEN)
 3. Refactor while keeping tests green (REFACTOR)
@@ -378,28 +273,13 @@ Merge findings from all 3 reviewers. For each finding:
 
 ### Step 4A: Regression Tests + Coverage Re-check
 
-Run the project's full test suite **with coverage**:
+Run the project's full test suite **with coverage** to catch coverage drops from Phase 3 review fixes:
 ```bash
 # Detect test runner and run with coverage
-if [[ -f "package.json" ]]; then
-  # Try common coverage commands in order
-  npm test -- --coverage 2>/dev/null || npx jest --coverage 2>/dev/null || npx vitest run --coverage 2>/dev/null || npm test
-elif [[ -f "pyproject.toml" ]] || [[ -f "setup.py" ]]; then
-  pytest --cov --cov-report=term-missing 2>/dev/null || python -m pytest --cov 2>/dev/null || pytest
-elif [[ -f "go.mod" ]]; then
-  go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out
-elif [[ -f "Cargo.toml" ]]; then
-  cargo llvm-cov --summary-only 2>/dev/null || cargo test
-fi
+npm test -- --coverage 2>/dev/null || npx jest --coverage 2>/dev/null || npx vitest run --coverage 2>/dev/null || npm test
 ```
 
-**After tests pass, check coverage:**
-
-Compare current coverage against the Phase 2 (TDD) baseline. Phase 3 review fixes and Phase 5 verify fixes can add code without tests — this gate catches that.
-
-- If coverage dropped below 80%: identify uncovered lines from review/verify fixes, write tests for them, re-run.
-- If coverage is at or above 80%: proceed.
-- If the project has no coverage tooling: note it and proceed (don't block on missing tooling).
+After tests pass, verify coverage is still >= 80%. If it dropped (due to new code from review fixes), write tests for uncovered paths.
 
 ### Step 4B: E2E Tests
 
@@ -416,9 +296,9 @@ If any test fails:
 4. Re-run the FULL test suite (not just the failing test)
 
 If coverage dropped below 80%:
-1. Identify which files/functions lost coverage (new code from Phase 3 fixes)
-2. Write targeted tests for uncovered paths
-3. Re-run with coverage to verify >= 80%
+1. Identify uncovered lines from Phase 3 fixes
+2. Write targeted tests
+3. Re-run with coverage
 
 ### Gate: Phase 4 Complete When
 
@@ -635,7 +515,7 @@ If any eval fails:
 
 **Purpose:** Commit and create a PR with full traceability.
 
-### RECALL: Read `.claude/ship-learnings/deliver.md` before starting. Check for past PR description issues or commit message patterns.
+### RECALL: Read `.claude/ship-learnings/deliver.md` before starting.
 
 ### Step 7A: Commit
 
@@ -713,21 +593,3 @@ PR: <PR URL>
 | Loosen an eval assertion to pass Phase 6 | The eval reflects the requirement. Fix the code, not the eval. |
 | Proceed after hard stop without user input | Hard stop means STOP. Ask the user. |
 | Retry the same fix twice | Each attempt must try a different approach. |
-
----
-
-## Related Skills
-
-- `/everything-claude-code:prp-plan` — Phase 1 planning
-- `/everything-claude-code:tdd` — Phase 2 test-driven development
-- `/everything-claude-code:code-review` — Phase 3 code review
-- `/everything-claude-code:security-review` — Phase 3 security review
-- `/codex:adversarial-review` — Phase 1 design challenge
-- `/codex:review` — Phase 3 implementation review
-- `/everything-claude-code:e2e` — Phase 4 end-to-end tests
-- `/everything-claude-code:verify` — Phase 5 verification
-- `/everything-claude-code:browser-qa` — Phase 5 UI spot-check
-- `/everything-claude-code:flutter-test` — Phase 5C Flutter simulator testing
-- `/everything-claude-code:eval` — Phase 6 acceptance evaluation
-- `/everything-claude-code:prp-commit` — Phase 7 commit
-- `/everything-claude-code:prp-pr` — Phase 7 pull request

@@ -42,7 +42,7 @@ ERRORS=0
 # ─────────────────────────────────────────────────────────────
 # Check 1: Claude Code CLI
 # ─────────────────────────────────────────────────────────────
-header "1/7 Claude Code CLI"
+header "1/11 Claude Code CLI"
 
 if command -v claude &>/dev/null; then
   CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
@@ -57,7 +57,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 2: Everything Claude Code (ECC) plugin
 # ─────────────────────────────────────────────────────────────
-header "2/7 Everything Claude Code (ECC) plugin"
+header "2/11 Everything Claude Code (ECC) plugin"
 
 ECC_INSTALLED=false
 
@@ -97,7 +97,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 3: Codex plugin
 # ─────────────────────────────────────────────────────────────
-header "3/7 Codex plugin"
+header "3/11 Codex plugin"
 
 CODEX_PLUGIN_INSTALLED=false
 
@@ -136,7 +136,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 4: Codex CLI authentication
 # ─────────────────────────────────────────────────────────────
-header "4/7 Codex CLI authentication"
+header "4/11 Codex CLI authentication"
 
 if command -v codex &>/dev/null; then
   pass "Codex CLI found"
@@ -192,7 +192,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 5: /ship command installed
 # ─────────────────────────────────────────────────────────────
-header "5/7 /ship command"
+header "5/11 /ship command"
 
 if [ -f "${COMMAND_DST}" ]; then
   # Check if it's up to date by comparing the command file with the source SKILL.md
@@ -236,10 +236,32 @@ else
   fi
 fi
 
+# Install ALL commands to ~/.claude/commands/ (not just /ship)
+if ! $CHECK_ONLY; then
+  COMMANDS_INSTALL_DIR="${HOME}/.claude/commands"
+  mkdir -p "${COMMANDS_INSTALL_DIR}"
+  for cmd_file in "${SCRIPT_DIR}/commands/"*.md; do
+    cmd_name=$(basename "$cmd_file")
+    dst="${COMMANDS_INSTALL_DIR}/${cmd_name}"
+    if [ -f "$dst" ]; then
+      SRC_SZ=$(wc -c < "$cmd_file" 2>/dev/null || echo "0")
+      DST_SZ=$(wc -c < "$dst" 2>/dev/null || echo "0")
+      if [ "$SRC_SZ" != "$DST_SZ" ]; then
+        cp "$cmd_file" "$dst"
+        info "Updated ${cmd_name}"
+      fi
+    else
+      cp "$cmd_file" "$dst"
+      info "Installed ${cmd_name}"
+    fi
+  done
+  pass "All commands installed to ${COMMANDS_INSTALL_DIR}/"
+fi
+
 # ─────────────────────────────────────────────────────────────
 # Check 6: Pipeline enforcement hooks
 # ─────────────────────────────────────────────────────────────
-header "6/7 Pipeline enforcement hooks"
+header "6/11 Pipeline enforcement hooks"
 
 HOOK_SCRIPT="${SCRIPT_DIR}/hooks/ship-gate.sh"
 SETTINGS_FILE="${HOME}/.claude/settings.json"
@@ -326,7 +348,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Check 7: Pipe-test the hook
 # ─────────────────────────────────────────────────────────────
-header "7/7 Hook pipe-test"
+header "7/11 Hook pipe-test"
 
 if [ -x "${HOOK_SCRIPT}" ]; then
   TEST_DIR=$(mktemp -d)
@@ -404,20 +426,27 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T8: 1A done → Skill tdd blocked (1B missing)" "deny" \
     '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
 
-  # ── Phase 1A + 1B done ──
+  # ── Phase 1A + 1B done, but no learnings captured ──
   echo "STEP_1B=done" >> .ship-pipeline-state
 
   run_test "T9: 1A+1B done → Edit source allowed (can code now)" "allow" \
     '{"tool_name":"Edit","tool_input":{"file_path":"src/lib/foo.ts"}}' "pre"
 
-  run_test "T10: 1A+1B done → Skill tdd allowed" "allow" \
+  run_test "T10: 1A+1B done but no LEARNINGS_PLAN → tdd blocked" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
+
+  # ── Learnings captured → tdd allowed ──
+  echo "LEARNINGS_PLAN=done" >> .ship-pipeline-state
+
+  run_test "T10b: 1A+1B+LEARNINGS_PLAN → tdd allowed" "allow" \
     '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' "pre"
 
   run_test "T11: 1A+1B done → Skill verify blocked (needs Phase 2+3)" "deny" \
     '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
 
-  # ── Phase 2 done, review fix-retry ──
+  # ── Phase 2 done, learnings captured, review fix-retry ──
   echo "STEP_2=done" >> .ship-pipeline-state
+  echo "LEARNINGS_TDD=done" >> .ship-pipeline-state
   echo "STEP_3A=done" >> .ship-pipeline-state
 
   run_test "T12: Review fix-retry → Edit source allowed" "allow" \
@@ -425,6 +454,24 @@ if [ -x "${HOOK_SCRIPT}" ]; then
 
   run_test "T13: 3A done → Skill security-review allowed (parallel with 3A)" "allow" \
     '{"tool_name":"Skill","tool_input":{"skill":"security-review"}}' "pre"
+
+  # ── Phase 4/5 ordering: verify blocked without STEP_4B + LEARNINGS_TEST ──
+  echo "STEP_3B=done" >> .ship-pipeline-state
+  echo "STEP_3C=done" >> .ship-pipeline-state
+  echo "LEARNINGS_REVIEW=done" >> .ship-pipeline-state
+
+  run_test "T13b: Verify blocked without STEP_4B" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
+
+  echo "STEP_4B=done" >> .ship-pipeline-state
+
+  run_test "T13c: Verify blocked without LEARNINGS_TEST" "deny" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
+
+  echo "LEARNINGS_TEST=done" >> .ship-pipeline-state
+
+  run_test "T13d: STEP_4B+LEARNINGS_TEST done → verify allowed" "allow" \
+    '{"tool_name":"Skill","tool_input":{"skill":"verify"}}' "pre"
 
   # ── Block state file deletion mid-pipeline ──
   run_test "T14: rm .ship-pipeline-state mid-pipeline → blocked" "deny" \
@@ -434,13 +481,53 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   run_test "T15: PostToolUse records step" "record" \
     '{"tool_name":"Skill","tool_input":{"skill":"prp-plan"}}' "post"
 
-  # ── All phases done, allow state file deletion ──
-  for step in STEP_3B STEP_3C STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B; do
+  # ── All phases done (including all learning gates), allow state file deletion ──
+  # Note: STEP_3B, STEP_3C, STEP_4B, LEARNINGS_REVIEW, LEARNINGS_TEST already set above
+  for step in STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B; do
     echo "${step}=done" >> .ship-pipeline-state
+  done
+  for gate in LEARNINGS_VERIFY LEARNINGS_EVAL LEARNINGS_DELIVER; do
+    echo "${gate}=done" >> .ship-pipeline-state
   done
 
   run_test "T16: All phases done → rm .ship-pipeline-state allowed" "allow" \
     '{"tool_name":"Bash","tool_input":{"command":"rm -f .ship-pipeline-state"}}' "pre"
+
+  # ── T17: RECALL auto-injects learning content ──
+  # Seed a tdd.md learning file; set state so STEP_2 (first step of TDD phase)
+  # invocation has its prereqs met. The PRE-hook for STEP_2 should embed the
+  # learning file content into additionalContext.
+  rm -f .ship-pipeline-state
+  cat > .ship-pipeline-state <<'EOSTATE'
+STEP_1A=done
+STEP_1B=done
+LEARNINGS_PLAN=done
+PLAN_BASELINE_HEADINGS=0
+TDD_BASELINE_HEADINGS=0
+EOSTATE
+  # Ensure LEARNINGS_PLAN gate clears via a new heading (Condition A)
+  mkdir -p .claude/ship-learnings
+  echo "### plan phase had a learning" > .claude/ship-learnings/plan.md
+  cat > .claude/ship-learnings/tdd.md <<'TDDMD'
+# /ship Learnings — tdd phase
+
+### Avoid flaky setTimeout mocks in React tests
+
+**Seen:** 1x — 2026-04-10
+**Category:** test-flake
+**Example:** jest.useFakeTimers broke because of React 18 batching
+**Resolution pattern:** Use jest.advanceTimersByTimeAsync + await
+TDDMD
+
+  TESTS_TOTAL=$((TESTS_TOTAL + 1))
+  RESULT=$(echo '{"tool_name":"Skill","tool_input":{"skill":"tdd"}}' | "${HOOK_SCRIPT}" pre 2>&1)
+  if echo "$RESULT" | grep -q "Avoid flaky setTimeout mocks"; then
+    pass "T17: RECALL injects learning file content into additionalContext"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    fail "T17: RECALL did not inject learning file content (got: ${RESULT:0:200})"
+    ERRORS=$((ERRORS + 1))
+  fi
 
   info "${TESTS_PASSED}/${TESTS_TOTAL} tests passed"
 
@@ -449,6 +536,83 @@ if [ -x "${HOOK_SCRIPT}" ]; then
   cd "${SCRIPT_DIR}"
 else
   warn "Hook script not executable — skipping pipe-test"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 8: /contextualize command
+# ─────────────────────────────────────────────────────────────
+header "8/11 /contextualize command"
+
+CONTEXTUALIZE_SRC="${SCRIPT_DIR}/skills/contextualize/SKILL.md"
+CONTEXTUALIZE_CMD="${SCRIPT_DIR}/commands/contextualize.md"
+
+if [ -f "${CONTEXTUALIZE_SRC}" ] && [ -f "${CONTEXTUALIZE_CMD}" ]; then
+  pass "/contextualize skill and command found"
+else
+  fail "/contextualize files missing"
+  [ ! -f "${CONTEXTUALIZE_SRC}" ] && info "Missing: skills/contextualize/SKILL.md"
+  [ ! -f "${CONTEXTUALIZE_CMD}" ] && info "Missing: commands/contextualize.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 9: /review-tech command
+# ─────────────────────────────────────────────────────────────
+header "9/11 /review-tech command"
+
+REVIEW_TECH_SRC="${SCRIPT_DIR}/skills/review-tech/SKILL.md"
+REVIEW_TECH_CMD="${SCRIPT_DIR}/commands/review-tech.md"
+
+if [ -f "${REVIEW_TECH_SRC}" ] && [ -f "${REVIEW_TECH_CMD}" ]; then
+  pass "/review-tech skill and command found"
+else
+  fail "/review-tech files missing"
+  [ ! -f "${REVIEW_TECH_SRC}" ] && info "Missing: skills/review-tech/SKILL.md"
+  [ ! -f "${REVIEW_TECH_CMD}" ] && info "Missing: commands/review-tech.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 10: /review-features command
+# ─────────────────────────────────────────────────────────────
+header "10/11 /review-features command"
+
+REVIEW_FEATURES_SRC="${SCRIPT_DIR}/skills/review-features/SKILL.md"
+REVIEW_FEATURES_CMD="${SCRIPT_DIR}/commands/review-features.md"
+
+if [ -f "${REVIEW_FEATURES_SRC}" ] && [ -f "${REVIEW_FEATURES_CMD}" ]; then
+  pass "/review-features skill and command found"
+else
+  fail "/review-features files missing"
+  [ ! -f "${REVIEW_FEATURES_SRC}" ] && info "Missing: skills/review-features/SKILL.md"
+  [ ! -f "${REVIEW_FEATURES_CMD}" ] && info "Missing: commands/review-features.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 11: /review-product command + Linear
+# ─────────────────────────────────────────────────────────────
+header "11/11 /review-product command + Linear"
+
+REVIEW_PRODUCT_SRC="${SCRIPT_DIR}/skills/review-product/SKILL.md"
+REVIEW_PRODUCT_CMD="${SCRIPT_DIR}/commands/review-product.md"
+
+if [ -f "${REVIEW_PRODUCT_SRC}" ] && [ -f "${REVIEW_PRODUCT_CMD}" ]; then
+  pass "/review-product skill and command found"
+else
+  fail "/review-product files missing"
+  [ ! -f "${REVIEW_PRODUCT_SRC}" ] && info "Missing: skills/review-product/SKILL.md"
+  [ ! -f "${REVIEW_PRODUCT_CMD}" ] && info "Missing: commands/review-product.md"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# Check Linear API token (optional)
+if [ -n "${LINEAR_API_KEY:-}" ]; then
+  pass "LINEAR_API_KEY is set (Linear sync will work)"
+else
+  warn "LINEAR_API_KEY not set (Linear sync will be disabled)"
+  info "Set LINEAR_API_KEY in your environment for Linear integration"
+  info "Linear sync is optional — all other features work without it"
 fi
 
 # ─────────────────────────────────────────────────────────────

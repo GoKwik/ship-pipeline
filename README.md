@@ -28,6 +28,35 @@ If any phase fails, it retries with a different fix (max 3 attempts). If it stil
 - **Native simulator testing** (Phase 5C) — always attempted; auto-detects Flutter, React Native, Expo, Capacitor projects. Asks user to approve skip if simulator isn't available.
 - **Auto-learning** — captures learnings after each phase, deduplicates, and feeds them back into future runs. Learnings stored in `.claude/ship-learnings/`.
 
+## Product Review Commands
+
+In addition to `/ship`, this plugin provides a product intelligence system:
+
+| Command | What | Output |
+|---------|------|--------|
+| `/contextualize` | Generate AI context bible for the repo | `.claude/product-review/CONTEXT.md` |
+| `/review-tech` | Analyze architecture, security, deps, tech debt | `.claude/product-review/TECH-REVIEW.md` |
+| `/review-features` | Identify feature gaps, UX improvements | `.claude/product-review/FEATURES-REVIEW.md` |
+| `/review-product` | Run all above + merge + rank + Linear sync | `.claude/product-review/BRIEF.md` |
+
+Each command works standalone or as part of the `/review-product` coordinator.
+
+### Modes
+
+- `--light` (default) — Incremental scan since last run. Fast. Linear read-only.
+- `--full` — Deep scan of entire codebase. Creates/closes Linear issues.
+
+### Linear Integration (optional)
+
+Set `LINEAR_API_KEY` in your environment. Configure `.claude/product-review/config.json` with your team and project IDs.
+
+### Scheduled Runs
+
+```
+/schedule create --name "product-review-light" --cron "0 9 * * 1-5" --prompt "/review-product --light"
+/schedule create --name "product-review-full" --cron "0 9 * * 1" --prompt "/review-product --full"
+```
+
 ## Install
 
 Two commands — no cloning, no setup scripts:
@@ -79,15 +108,32 @@ bash setup.sh
 ```
 ship-pipeline/
 ├── .claude-plugin/
-│   ├── plugin.json            ← Plugin manifest (makes it installable)
-│   └── marketplace.json       ← Marketplace descriptor
-├── skills/ship/
-│   ├── SKILL.md               ← Source of truth — full pipeline spec
-│   └── .provenance.json       ← Metadata
+│   ├── plugin.json                ← Plugin manifest
+│   └── marketplace.json           ← Marketplace descriptor
+├── skills/
+│   ├── ship/                      ← /ship pipeline skill
+│   │   ├── SKILL.md
+│   │   └── .provenance.json
+│   ├── contextualize/             ← /contextualize AI bible skill
+│   │   ├── SKILL.md
+│   │   └── .provenance.json
+│   ├── review-tech/               ← /review-tech technical health skill
+│   │   ├── SKILL.md
+│   │   └── .provenance.json
+│   ├── review-features/           ← /review-features product intelligence skill
+│   │   ├── SKILL.md
+│   │   └── .provenance.json
+│   └── review-product/            ← /review-product coordinator skill
+│       ├── SKILL.md
+│       └── .provenance.json
 ├── commands/
-│   └── ship.md                ← Command entry point (/ship slash command)
+│   ├── ship.md                    ← /ship command entry
+│   ├── contextualize.md           ← /contextualize command entry
+│   ├── review-tech.md             ← /review-tech command entry
+│   ├── review-features.md         ← /review-features command entry
+│   └── review-product.md          ← /review-product command entry
 ├── hooks/
-│   └── ship-gate.sh           ← Hook enforcement (prereqs, edit blocks, learning reminders)
-├── setup.sh                   ← Manual installer + validator (16 tests)
-└── README.md                  ← You are here
+│   └── ship-gate.sh               ← Hook enforcement for /ship pipeline
+├── setup.sh                       ← Installer + validator (11 checks)
+└── README.md
 ```
