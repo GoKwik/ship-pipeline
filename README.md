@@ -68,14 +68,15 @@ The hook cross-checks the verdict against the actual baseline, so you can't get 
 
 ## Install
 
-Two commands — no cloning, no setup script:
+Clone the repo and run the setup script:
 
 ```bash
-claude /plugin marketplace add GoKwik/ship-pipeline
-claude /plugin install ship@ship-pipeline
+git clone git@github.com:GoKwik/ship-pipeline.git
+cd ship-pipeline
+bash setup.sh
 ```
 
-The plugin ships `hooks/hooks.json`, so enforcement auto-wires on install — no extra step.
+`setup.sh` validates prerequisites, installs the `/ship` command + skill to `~/.claude/`, wires the enforcement hooks into `~/.claude/settings.json`, and runs 35 self-tests (all must pass).
 
 Then in any Claude Code session:
 
@@ -92,22 +93,12 @@ Then in any Claude Code session:
 ### Updating
 
 ```bash
-claude /plugin update ship@ship-pipeline
-```
-
-### Manual Setup (alternative)
-
-If you prefer cloning directly:
-
-```bash
-git clone git@github.com:GoKwik/ship-pipeline.git
 cd ship-pipeline
+git pull
 bash setup.sh
 ```
 
-`setup.sh` validates prerequisites, installs the `/ship` command + skill, wires hooks into `~/.claude/settings.json`, and runs 35 self-tests (all of which must pass).
-
-Run `bash setup.sh --check` at any time to re-validate your install.
+Run `bash setup.sh --check` at any time to re-validate your install without modifying anything.
 
 ## Configuration
 
