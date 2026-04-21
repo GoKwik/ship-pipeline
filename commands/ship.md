@@ -1,18 +1,72 @@
 ---
-description: "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver with hard quality gates"
+description: "Full-cycle shipping pipeline v1.1.0: plan → TDD → review → test → verify → eval → deliver with hard quality gates"
 argument-hint: "<task description>"
+version: "1.1.0"
 ---
 
-# /ship — Full-Cycle Shipping Pipeline
+# /ship — Full-Cycle Shipping Pipeline (v1.1.0)
 
 One command to take a task from idea to merged PR with deterministic quality enforcement at every step.
 
 The task to implement:
 `$ARGUMENTS`
 
+## Version Banner (MANDATORY FIRST OUTPUT)
+
+Before any other action — even before the Pipeline State Initialization bash block — print this banner verbatim to the user:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ SHIP PIPELINE  v1.1.0
+ Updated: 2026-04-21 (coverage 95%, baseline diff, STEP_4A, verdict sanity)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+This tells the user exactly which pipeline version is running. If they expected a newer version, they will stop you here.
+
 ## Pipeline State Initialization
 
-**MANDATORY FIRST ACTION:** Before anything else, initialize the pipeline state file:
+**MANDATORY FIRST ACTION:** Complete these 2 steps IN ORDER before Phase 1.
+
+### Step A: Capture test baseline (BEFORE creating state file)
+
+Run the project's full test suite NOW, before anything else. This gives us a pre-change snapshot so Phase 4A can distinguish regressions (newly failing tests) from pre-existing failures (already broken before `/ship` started).
+
+**Important:** This runs while the enforcement hook is INACTIVE (state file doesn't exist yet, so `npm test`-like commands are not blocked by STEP_4A matching).
+
+Detect the project's test runner (from `package.json` scripts, `pyproject.toml`, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`, etc.) and run it with structured output where possible:
+
+| Runner | Command |
+|--------|---------|
+| vitest | `npx vitest run --reporter=json > /tmp/ship-baseline.json` |
+| jest   | `npx jest --json --outputFile=/tmp/ship-baseline.json` |
+| npm    | `npm test -- --json --outputFile=/tmp/ship-baseline.json` |
+| pytest | `pytest --json-report --json-report-file=/tmp/ship-baseline.json` |
+| go     | `go test -json ./... > /tmp/ship-baseline.json` |
+| cargo  | `cargo test --message-format=json > /tmp/ship-baseline.json` |
+
+Then write `.ship-baseline-tests.json` with this schema:
+
+```json
+{
+  "captured_at": "<ISO-8601 timestamp>",
+  "test_command": "<exact command used>",
+  "runner": "vitest|jest|pytest|go|cargo|other",
+  "total": <N>,
+  "passed": <N>,
+  "failed": <N>,
+  "failed_tests": ["<stable test id>", ...]
+}
+```
+
+Edge cases:
+- **All tests pass:** write `failed_tests: []` — still capture the baseline.
+- **No tests in repo:** write `{"total": 0, "failed_tests": [], "note": "no tests detected"}`.
+- **Test runner not installed / setup error:** do NOT proceed. Ask the user to fix the test environment first.
+- **Flaky tests:** run twice and record the stable fail set (tests that failed both runs). Document any flakes in the `note` field.
+
+### Step B: Initialize pipeline state
+
 ```bash
 echo "# /ship pipeline state — $(date -Iseconds)" > .ship-pipeline-state
 echo "# Task: $ARGUMENTS" >> .ship-pipeline-state
@@ -40,7 +94,9 @@ for phase in plan tdd review test verify eval deliver; do
 done
 ```
 
-This file is used by enforcement hooks to prevent skipping steps. If this file does not exist, the pipeline gates are disabled.
+After this, verify `.ship-baseline-tests.json` exists. If missing, HARD STOP — do not proceed to Phase 1.
+
+The `.ship-pipeline-state` file is used by enforcement hooks to prevent skipping steps. If this file does not exist, the pipeline gates are disabled.
 The `MOBILE_APP` flag determines whether Phase 5C (Native Simulator QA) is mandatory.
 
 ## Prerequisites
@@ -176,10 +232,35 @@ If the adversarial review surfaces legitimate design flaws:
 2. Re-run adversarial review on the revised plan
 3. Max 3 iterations
 
+### Report Before Asking for Confirmation (MANDATORY)
+
+Before asking the user to confirm the plan, you MUST print an "Adversarial Review Summary" block so the user can see what was challenged and how it was resolved. Do not ask for confirmation without it.
+
+Format:
+
+```
+## Adversarial Review Summary
+
+Codex raised N issue(s) across <iterations>/3 iteration(s):
+
+1. **<short title>** — <one-line description of the concern>
+   **Resolved by:** <what changed in the plan>
+
+2. **<short title>** — ...
+   **Resolved by:** ...
+
+Final verdict: PASS (all findings addressed)
+```
+
+If codex raised zero findings, say so explicitly: "Codex adversarial review passed on first iteration — no design flaws found."
+
+The user needs this summary to validate the review's quality. Silently rolling findings into the plan and asking for confirmation defeats the purpose of the adversarial step.
+
 ### Gate: Phase 1 Complete When
 
 - [ ] Implementation plan exists with acceptance criteria
 - [ ] Adversarial review has no unresolved design challenges
+- [ ] Adversarial Review Summary printed to user (findings + resolutions, or "no findings")
 - [ ] User explicitly confirms the plan (MANDATORY — do not skip)
 
 **WAIT FOR USER CONFIRMATION BEFORE PROCEEDING TO PHASE 2.**
@@ -214,7 +295,7 @@ If tests fail after implementation:
 ### Gate: Phase 2 Complete When
 
 - [ ] All tests pass (GREEN)
-- [ ] Coverage >= 80%
+- [ ] Coverage >= 95%
 - [ ] Tests cover edge cases and error scenarios from the plan
 - [ ] Git checkpoint commits exist for RED → GREEN → REFACTOR
 
@@ -271,12 +352,43 @@ Merge findings from all 3 reviewers. For each finding:
 
 ### RECALL: Read `.claude/ship-learnings/test.md` before starting. Watch for previously flaky tests or known timing issues.
 
-### Step 4A: Regression Tests
+### Step 4A: Regression Tests (diff against baseline)
 
-Run the project's full test suite:
+Run the project's full test suite using the same command recorded in `.ship-baseline-tests.json.test_command`:
 ```bash
 npm test
 ```
+
+After running, **diff against the baseline** to tell regressions apart from pre-existing failures:
+
+1. Load `.ship-baseline-tests.json` → `baseline_failures` set.
+2. Run current suite → `current_failures` set.
+3. Compute:
+   - `new_failures = current_failures - baseline_failures` (tests that were PASSING before `/ship` started but are FAILING now — these are REGRESSIONS).
+   - `pre_existing_failures = current_failures ∩ baseline_failures` (already broken before `/ship`; log but do not block).
+   - `fixed_tests = baseline_failures - current_failures` (bonus — surfaced in the report but not required).
+4. Verdict:
+   - `new_failures` empty → verdict `PASS`.
+   - `new_failures` non-empty → verdict `FAIL`. Each new failure must be fixed before STEP_4A is recorded.
+
+Write the verdict to `.ship-4a-regression-check.json`:
+
+```json
+{
+  "verdict": "PASS" | "FAIL",
+  "ran_at": "<ISO-8601 timestamp>",
+  "baseline_failures": ["<test id>", ...],
+  "current_failures": ["<test id>", ...],
+  "new_failures": ["<test id>", ...],
+  "pre_existing_failures": ["<test id>", ...],
+  "fixed_tests": ["<test id>", ...]
+}
+```
+
+Report to the user:
+- **Regressions (blocking):** `new_failures` list — fix before advancing.
+- **Pre-existing failures (informational):** `pre_existing_failures` list — unchanged from baseline, not blocking.
+- **Fixed:** `fixed_tests` (if any) — tests that were broken before and now pass.
 
 ### Step 4B: E2E Tests
 
@@ -286,17 +398,24 @@ Runs Playwright end-to-end tests against critical user flows.
 
 ### Fix-Loop Trigger
 
-If any test fails:
-1. Identify which test failed and why
-2. Determine if the failure is in new code or a regression in existing code
-3. Fix the root cause
-4. Re-run the FULL test suite (not just the failing test)
+If STEP_4A verdict is FAIL (new_failures non-empty):
+1. For each test in `new_failures`, identify the root cause (most often the new code from Phase 2).
+2. Fix the root cause — do NOT silence the test.
+3. Re-run the FULL test suite (not just the failing test).
+4. Re-compute the diff and overwrite `.ship-4a-regression-check.json`.
+
+Pre-existing failures are intentionally NOT a blocker — they were already broken when `/ship` started, so fixing them is out of scope for this change. The report lists them so they're visible.
+
+If an E2E test fails (4B):
+1. Identify which test failed and why.
+2. Fix the root cause.
+3. Re-run the full E2E suite.
 
 ### Gate: Phase 4 Complete When
 
-- [ ] All unit/integration tests pass
+- [ ] `.ship-4a-regression-check.json` exists with `verdict = "PASS"` (no new failures vs baseline)
 - [ ] All E2E tests pass
-- [ ] No regressions in existing functionality
+- [ ] Pre-existing failures are reported but accepted as out of scope
 
 ### CAPTURE: Append learnings to `.claude/ship-learnings/test.md`. Note flaky tests, timing issues, and environment-specific failures.
 
