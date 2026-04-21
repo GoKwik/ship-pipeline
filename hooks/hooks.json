@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill|Agent|Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/ship-gate.sh\" pre",
+            "timeout": 5
+          }
+        ],
+        "description": "/ship pipeline: enforce phase ordering, block pre-plan source edits, guard state file",
+        "id": "ship:pre:gate"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill|Agent|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/ship-gate.sh\" post",
+            "timeout": 5
+          }
+        ],
+        "description": "/ship pipeline: record phase completion, enforce coverage/verdict gates, prompt for learnings",
+        "id": "ship:post:gate"
+      }
+    ]
+  }
+}

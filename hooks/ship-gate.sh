@@ -17,9 +17,67 @@ set -euo pipefail
 
 MODE="${1:-}"
 STATE_FILE=".ship-pipeline-state"
+BASELINE_FILE=".ship-baseline-tests.json"
 
 # Read JSON from stdin
 INPUT=$(cat)
+
+# ── Enforce baseline-before-state (runs BEFORE the "no state file" early return) ──
+# The baseline captures pre-change test pass/fail so Phase 4A can distinguish
+# regressions from pre-existing failures. It MUST exist before .ship-pipeline-state
+# is created, otherwise the whole diff-based gate has no reference point.
+if [[ "$MODE" == "pre" && ! -f "$STATE_FILE" ]]; then
+  _TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
+  _CREATING_STATE=false
+  if [[ "$_TOOL" == "Bash" ]]; then
+    _CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
+    # Matches: `> .ship-pipeline-state`, `touch .ship-pipeline-state`, `tee ... .ship-pipeline-state`
+    if echo "$_CMD" | grep -qE "(>[[:space:]]*\.ship-pipeline-state|touch[[:space:]]+\.ship-pipeline-state|tee[[:space:]]+.*\.ship-pipeline-state)"; then
+      _CREATING_STATE=true
+    fi
+  fi
+  if [[ "$_TOOL" == "Write" || "$_TOOL" == "Edit" ]]; then
+    _FP=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null || true)
+    if [[ "$_FP" == *".ship-pipeline-state"* ]]; then
+      _CREATING_STATE=true
+    fi
+  fi
+
+  if $_CREATING_STATE; then
+    if [[ ! -f "$BASELINE_FILE" ]]; then
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "SHIP PIPELINE GATE: Cannot create .ship-pipeline-state without a baseline.\\n\\n.ship-baseline-tests.json does not exist. Pipeline Init Step A (baseline test capture) MUST run BEFORE Step B (state file creation) — otherwise Phase 4A has no reference for the regression diff.\\n\\nRun the project's test suite now and write .ship-baseline-tests.json with this schema:\\n  {\\n    \\\"captured_at\\\": \\\"<ISO-8601>\\\",\\n    \\\"test_command\\\": \\\"<exact command>\\\",\\n    \\\"failed_tests\\\": [<test ids>],\\n    \\\"total\\\": N, \\\"passed\\\": N, \\\"failed\\\": N\\n  }\\n\\nThen re-attempt state file creation."
+  }
+}
+EOF
+      exit 0
+    fi
+    # Schema validation — required fields
+    if ! jq -e 'has("test_command") and has("failed_tests") and (.failed_tests | type == "array")' "$BASELINE_FILE" >/dev/null 2>&1; then
+      MISSING=$(jq -r '
+        [
+          (if has("test_command") then empty else "test_command" end),
+          (if has("failed_tests") then empty else "failed_tests" end),
+          (if (.failed_tests // null) | type == "array" then empty else "failed_tests (must be array)" end)
+        ] | join(", ")
+      ' "$BASELINE_FILE" 2>/dev/null || echo "unparseable JSON")
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "SHIP PIPELINE GATE: .ship-baseline-tests.json is malformed.\\n\\nMissing or invalid fields: ${MISSING}\\n\\nRequired schema: { test_command: string, failed_tests: array, ... }. Fix the baseline file before creating .ship-pipeline-state."
+  }
+}
+EOF
+      exit 0
+    fi
+  fi
+fi
 
 # ── If no state file, pipeline isn't active — allow everything ──
 if [[ ! -f "$STATE_FILE" ]]; then
@@ -84,12 +142,20 @@ resolve_step() {
     esac
   fi
 
-  # Check Bash tool for native simulator commands (React Native / Expo)
+  # Check Bash tool for regression-test and native-simulator commands
   if [[ "$TOOL_NAME" == "Bash" ]]; then
     local cmd
     cmd=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
+
+    # Native simulator commands → STEP_5C (match first, before generic test matchers)
     if echo "$cmd" | grep -qE "(detox test|maestro test|xcrun simctl|emulator |flutter drive|flutter test.*integration)"; then
       echo "STEP_5C"; return
+    fi
+
+    # Regression-test runners → STEP_4A
+    # Matches: npm/yarn/pnpm test, vitest, jest, pytest, go test, cargo test, mvn test, gradle test
+    if echo "$cmd" | grep -qE "(^|[[:space:]]|;|&&|\|\|)(npm|yarn|pnpm)[[:space:]]+(run[[:space:]]+)?test([[:space:]]|$)|(^|[[:space:]]|;|&&|\|\|)(vitest|jest|pytest|mocha)([[:space:]]|$)|(^|[[:space:]]|;|&&|\|\|)go[[:space:]]+test([[:space:]]|$)|(^|[[:space:]]|;|&&|\|\|)cargo[[:space:]]+test([[:space:]]|$)|(^|[[:space:]]|;|&&|\|\|)(mvn|gradle|\./gradlew)[[:space:]]+(.*[[:space:]])?test([[:space:]]|$)"; then
+      echo "STEP_4A"; return
     fi
   fi
 
@@ -123,8 +189,9 @@ get_prereqs() {
     STEP_3A) echo "STEP_2" ;;
     STEP_3B) echo "STEP_2" ;;
     STEP_3C) echo "STEP_2" ;;
-    STEP_4B) echo "STEP_3A STEP_3B" ;;
-    STEP_5A) echo "STEP_3A STEP_3B" ;;
+    STEP_4A) echo "STEP_3A STEP_3B STEP_3C" ;;
+    STEP_4B) echo "STEP_3A STEP_3B STEP_3C STEP_4A" ;;
+    STEP_5A) echo "STEP_3A STEP_3B STEP_3C STEP_4A STEP_4B" ;;
     STEP_5B) echo "STEP_5A" ;;
     STEP_5C) echo "STEP_5A" ;;
     STEP_6)  echo "STEP_5A STEP_5C" ;;
@@ -143,6 +210,7 @@ step_name() {
     STEP_3A) echo "Phase 3A: Code Review (/code-review)" ;;
     STEP_3B) echo "Phase 3B: Security Review (/security-review)" ;;
     STEP_3C) echo "Phase 3C: Codex Review (/codex:review)" ;;
+    STEP_4A) echo "Phase 4A: Regression Tests (npm test / pytest / go test / etc.)" ;;
     STEP_4B) echo "Phase 4B: E2E Tests (/e2e)" ;;
     STEP_5A) echo "Phase 5A: Verification (/verify)" ;;
     STEP_5B) echo "Phase 5B: Browser QA (/browser-qa)" ;;
@@ -156,7 +224,7 @@ step_name() {
 
 # ── Build progress header ──
 build_progress() {
-  local ALL_STEPS="STEP_1A STEP_1B STEP_2 STEP_3A STEP_3B STEP_3C STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B"
+  local ALL_STEPS="STEP_1A STEP_1B STEP_2 STEP_3A STEP_3B STEP_3C STEP_4A STEP_4B STEP_5A STEP_5B STEP_5C STEP_6 STEP_7A STEP_7B"
   local header="\\n=== /ship Pipeline Progress ===\\n"
 
   for step in $ALL_STEPS; do
@@ -168,6 +236,7 @@ build_progress() {
       STEP_3A) name="3A Code Review" ;;
       STEP_3B) name="3B Security" ;;
       STEP_3C) name="3C Codex Review" ;;
+      STEP_4A) name="4A Regression Tests" ;;
       STEP_4B) name="4B E2E Tests" ;;
       STEP_5A) name="5A Verify" ;;
       STEP_5B) name="5B Browser QA" ;;
@@ -226,11 +295,28 @@ EOF
   exit 0
 fi
 
-# ── Block state file deletion ──
+# ── Block state file deletion / truncation / move ──
+# Catches: rm, unlink, shred, find -delete, mv, cp (overwrite), and > redirection
 if [[ "$MODE" == "pre" && "$TOOL_NAME" == "Bash" ]]; then
   BASH_CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
-  if echo "$BASH_CMD" | grep -q "rm.*\.ship-pipeline-state"; then
-    # Only allow deletion if all steps are done
+  TOUCHES_STATE=false
+  if echo "$BASH_CMD" | grep -q "\.ship-pipeline-state"; then
+    # Destructive ops targeting the state file
+    if echo "$BASH_CMD" | grep -qE "(^|[[:space:]]|;|&&|\|\|)(rm|unlink|shred|mv)([[:space:]]|$)"; then
+      TOUCHES_STATE=true
+    fi
+    # Truncate / clobber via redirection: `> .ship-pipeline-state` or `>> .ship-pipeline-state` with truncate semantics
+    if echo "$BASH_CMD" | grep -qE ">[[:space:]]*\.ship-pipeline-state"; then
+      TOUCHES_STATE=true
+    fi
+    # find ... -delete
+    if echo "$BASH_CMD" | grep -qE "find[[:space:]].*-delete"; then
+      TOUCHES_STATE=true
+    fi
+  fi
+
+  if $TOUCHES_STATE; then
+    # Only allow destructive ops if all steps are done
     if ! step_done "STEP_7B"; then
       PROGRESS=$(build_progress "")
       cat <<EOF
@@ -238,7 +324,7 @@ if [[ "$MODE" == "pre" && "$TOOL_NAME" == "Bash" ]]; then
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "SHIP PIPELINE GATE VIOLATION: Cannot delete .ship-pipeline-state before all phases are complete.\\n\\nPhase 7B (PR) must be done before the state file can be removed.\\n\\nThis is enforced by the /ship pipeline hooks. No exceptions.\\n${PROGRESS}"
+    "permissionDecisionReason": "SHIP PIPELINE GATE VIOLATION: Cannot delete, move, or truncate .ship-pipeline-state before all phases are complete.\\n\\nPhase 7B (PR) must be done before the state file can be removed.\\n\\nThis is enforced by the /ship pipeline hooks. No exceptions.\\n${PROGRESS}"
   }
 }
 EOF
@@ -340,6 +426,128 @@ EOF
     fi
   fi
 
+  # STEP_4A requires .ship-4a-regression-check.json with verdict=PASS before recording.
+  # This distinguishes regressions (newly failing tests) from pre-existing failures
+  # by diffing current failures against the baseline captured at /ship start.
+  if [[ "$CURRENT_STEP" == "STEP_4A" ]]; then
+    VERDICT_FILE=".ship-4a-regression-check.json"
+    if [[ ! -f "$VERDICT_FILE" ]]; then
+      PROGRESS=$(build_progress "$CURRENT_STEP")
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "[SHIP GATE] Phase 4A: regression check file missing (.ship-4a-regression-check.json).\\n\\nAfter running the test suite, diff current failures against .ship-baseline-tests.json and write a verdict file.\\nSTEP_4A will NOT be recorded until this file exists with verdict=PASS.\\nSee the Phase 4A section of the /ship skill for the file schema.\\n${PROGRESS}"
+  }
+}
+EOF
+      exit 0
+    fi
+    VERDICT=$(jq -r '.verdict // empty' "$VERDICT_FILE" 2>/dev/null | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+    if [[ "$VERDICT" != "PASS" ]]; then
+      NEW_FAILURES=$(jq -r '.new_failures // [] | join(", ")' "$VERDICT_FILE" 2>/dev/null || echo "<unable to parse>")
+      PROGRESS=$(build_progress "$CURRENT_STEP")
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "[SHIP GATE] Phase 4A: Regression detected. Verdict: ${VERDICT:-<missing>}.\\n\\nNew failures (tests that passed in baseline but fail now): ${NEW_FAILURES:-<none listed>}\\n\\nFix these regressions before STEP_4A can be recorded. Pre-existing failures are NOT blockers — only tests that went PASS → FAIL count.\\n${PROGRESS}"
+  }
+}
+EOF
+      exit 0
+    fi
+
+    # Verdict math sanity check — prevents mislabeling a regression as pre-existing.
+    # Rules:
+    #   1. pre_existing_failures ⊆ baseline_failures  (can't claim pre-existing if not in baseline)
+    #   2. new_failures ∩ baseline_failures = ∅       (a test listed in baseline is not "new")
+    if [[ -f "$BASELINE_FILE" ]]; then
+      MATH_OK=$(jq --slurpfile baseline "$BASELINE_FILE" '
+        ($baseline[0].failed_tests // []) as $base |
+        (.pre_existing_failures // []) as $pre |
+        (.new_failures // []) as $new |
+        ($pre | all(. as $t | ($base | index($t)) != null)) as $pre_ok |
+        ($new | all(. as $t | ($base | index($t)) == null)) as $new_ok |
+        if $pre_ok and $new_ok then "OK"
+        elif ($pre_ok | not) then "PRE_EXISTING_NOT_IN_BASELINE"
+        else "NEW_FAILURE_ALREADY_IN_BASELINE"
+        end
+      ' "$VERDICT_FILE" 2>/dev/null | tr -d '"')
+
+      if [[ "$MATH_OK" != "OK" ]]; then
+        BAD_LIST=""
+        if [[ "$MATH_OK" == "PRE_EXISTING_NOT_IN_BASELINE" ]]; then
+          BAD_LIST=$(jq --slurpfile baseline "$BASELINE_FILE" -r '
+            ($baseline[0].failed_tests // []) as $base |
+            [(.pre_existing_failures // [])[] | select(. as $t | ($base | index($t)) == null)] | join(", ")
+          ' "$VERDICT_FILE" 2>/dev/null)
+          REASON="Tests claimed as pre_existing_failures but NOT in baseline.failed_tests: ${BAD_LIST}. A test can only be 'pre-existing' if it was actually failing in the baseline."
+        else
+          BAD_LIST=$(jq --slurpfile baseline "$BASELINE_FILE" -r '
+            ($baseline[0].failed_tests // []) as $base |
+            [(.new_failures // [])[] | select(. as $t | ($base | index($t)) != null)] | join(", ")
+          ' "$VERDICT_FILE" 2>/dev/null)
+          REASON="Tests claimed as new_failures but they were ALREADY in baseline.failed_tests: ${BAD_LIST}. These are pre-existing, not new — do not list them as new failures."
+        fi
+        PROGRESS=$(build_progress "$CURRENT_STEP")
+        cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "[SHIP GATE] Phase 4A: Verdict math is inconsistent with baseline.\\n\\n${REASON}\\n\\nFix .ship-4a-regression-check.json so: pre_existing_failures ⊆ baseline_failures AND new_failures ∩ baseline_failures = ∅.\\nSTEP_4A will NOT be recorded until the math is correct.\\n${PROGRESS}"
+  }
+}
+EOF
+        exit 0
+      fi
+    fi
+  fi
+
+  # STEP_2 requires coverage ≥ threshold (default 95%) before recording completion.
+  # Parses Istanbul-format coverage-summary.json (vitest/jest/nyc default output).
+  # Bypass: set SHIP_SKIP_COVERAGE_CHECK=1 (for projects without coverage tooling).
+  if [[ "$CURRENT_STEP" == "STEP_2" && "${SHIP_SKIP_COVERAGE_CHECK:-0}" != "1" ]]; then
+    THRESHOLD="${SHIP_COVERAGE_THRESHOLD:-95}"
+    COV_PCT=""
+    COV_SOURCE=""
+    for path in coverage/coverage-summary.json coverage-summary.json coverage/lcov-report/coverage-summary.json; do
+      if [[ -f "$path" ]]; then
+        COV_PCT=$(jq -r '.total.lines.pct // empty' "$path" 2>/dev/null || true)
+        if [[ -n "$COV_PCT" && "$COV_PCT" != "null" ]]; then
+          COV_SOURCE="$path"
+          break
+        fi
+      fi
+    done
+
+    if [[ -z "$COV_PCT" ]]; then
+      PROGRESS=$(build_progress "$CURRENT_STEP")
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "[SHIP GATE] Phase 2: Coverage report not found. Expected at coverage/coverage-summary.json.\\n\\nRun your test suite with coverage enabled (e.g., 'npm test -- --coverage', 'vitest run --coverage', 'pytest --cov=. --cov-report=json').\\nSTEP_2 will NOT be recorded until coverage >= ${THRESHOLD}% is verified.\\nBypass (projects without coverage tooling): export SHIP_SKIP_COVERAGE_CHECK=1\\n${PROGRESS}"
+  }
+}
+EOF
+      exit 0
+    fi
+
+    if awk "BEGIN {exit !($COV_PCT < $THRESHOLD)}"; then
+      PROGRESS=$(build_progress "$CURRENT_STEP")
+      cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "[SHIP GATE] Phase 2: Coverage ${COV_PCT}% is BELOW threshold ${THRESHOLD}%.\\n\\nAdd more tests to reach ${THRESHOLD}% line coverage.\\nSTEP_2 will NOT be recorded until threshold is met.\\nCoverage source: ${COV_SOURCE}\\n${PROGRESS}"
+  }
+}
+EOF
+      exit 0
+    fi
+  fi
+
   record_step "$CURRENT_STEP"
 
   # Append to session log for learning/history
@@ -364,7 +572,7 @@ EOF
     STEP_1A|STEP_1B) LEARNING_FILE="plan" ;;
     STEP_2)          LEARNING_FILE="tdd" ;;
     STEP_3A|STEP_3B|STEP_3C) LEARNING_FILE="review" ;;
-    STEP_4B)         LEARNING_FILE="test" ;;
+    STEP_4A|STEP_4B) LEARNING_FILE="test" ;;
     STEP_5A|STEP_5B|STEP_5C) LEARNING_FILE="verify" ;;
     STEP_6)          LEARNING_FILE="eval" ;;
     STEP_7A|STEP_7B) LEARNING_FILE="deliver" ;;
