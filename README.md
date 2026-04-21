@@ -90,14 +90,6 @@ Then in any Claude Code session:
 - [Everything Claude Code](https://github.com/affaan-m/everything-claude-code) plugin
 - [Codex plugin](https://github.com/openai/codex-plugin-cc) + authentication
 
-### Updating
-
-```bash
-cd ship-pipeline
-git pull
-bash setup.sh
-```
-
 Run `bash setup.sh --check` at any time to re-validate your install without modifying anything.
 
 ## Configuration
