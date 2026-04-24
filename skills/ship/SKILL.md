@@ -1,12 +1,12 @@
 ---
 name: ship
-description: "Full-cycle shipping pipeline v1.1.0: plan → TDD → review → test → verify → eval → deliver. One command with hard quality gates and fix-retry loops. Requires ECC + Codex plugins."
+description: "Full-cycle shipping pipeline v1.1.1: plan → TDD → review → test → verify → eval → deliver. One command with hard quality gates and fix-retry loops. Requires ECC + Codex plugins."
 origin: custom
-version: "1.1.0"
+version: "1.1.1"
 tools: Read, Write, Edit, Bash, Grep, Glob, Agent, Skill
 ---
 
-# /ship — Full-Cycle Shipping Pipeline (v1.1.0)
+# /ship — Full-Cycle Shipping Pipeline (v1.1.1)
 
 One command to take a task from idea to merged PR with deterministic quality enforcement at every step.
 
@@ -16,7 +16,7 @@ Before any other action — even before the Pipeline State Initialization bash b
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- SHIP PIPELINE  v1.1.0
+ SHIP PIPELINE  v1.1.1
  Updated: 2026-04-21 (coverage 95%, baseline diff, STEP_4A, verdict sanity)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```

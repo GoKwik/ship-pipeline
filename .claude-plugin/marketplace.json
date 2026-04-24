@@ -11,7 +11,7 @@
       "name": "ship",
       "source": "./",
       "description": "Full-cycle shipping pipeline: plan → TDD → review → test → verify → eval → deliver with hard quality gates and auto-learning",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": {
         "name": "GoKwik",
         "email": "engineering@gokwik.co"

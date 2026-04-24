@@ -1,6 +1,6 @@
 # /ship — Full-Cycle Shipping Pipeline
 
-**v1.1.0** · One command to take a task from idea to merged PR with deterministic, hook-enforced quality gates.
+**v1.1.1** · One command to take a task from idea to merged PR with deterministic, hook-enforced quality gates.
 
 ```
 /ship Add webhook support for card expiry notifications
@@ -10,7 +10,7 @@ When you invoke `/ship`, the first line Claude prints is:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- SHIP PIPELINE  v1.1.0
+ SHIP PIPELINE  v1.1.1
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -143,9 +143,13 @@ ship-pipeline/
 
 ## Version
 
-**1.1.0** (2026-04-21)
+**1.1.1** (2026-04-25)
 
 ### Changelog
+
+**v1.1.1**
+- Clarify that Codex steps (1B `/codex:adversarial-review`, 3C `/codex:review`) are plugin slash commands, not skills — they won't appear in a skills-registry scan
+- Self-review is a fallback only if the Codex command itself fails; never a silent bypass
 
 **v1.1.0**
 - Coverage gate raised 80 → 95% with post-hook parser for `coverage-summary.json`
