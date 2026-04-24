@@ -1,10 +1,10 @@
 ---
-description: "Full-cycle shipping pipeline v1.1.0: plan → TDD → review → test → verify → eval → deliver with hard quality gates"
+description: "Full-cycle shipping pipeline v1.1.1: plan → TDD → review → test → verify → eval → deliver with hard quality gates"
 argument-hint: "<task description>"
-version: "1.1.0"
+version: "1.1.1"
 ---
 
-# /ship — Full-Cycle Shipping Pipeline (v1.1.0)
+# /ship — Full-Cycle Shipping Pipeline (v1.1.1)
 
 One command to take a task from idea to merged PR with deterministic quality enforcement at every step.
 
@@ -17,7 +17,7 @@ Before any other action — even before the Pipeline State Initialization bash b
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- SHIP PIPELINE  v1.1.0
+ SHIP PIPELINE  v1.1.1
  Updated: 2026-04-21 (coverage 95%, baseline diff, STEP_4A, verdict sanity)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -219,6 +219,8 @@ This produces:
 
 Invoke: `/codex:adversarial-review --wait --scope working-tree`
 
+It's a slash command from the codex plugin — not a skill, so it will not appear in a skills-registry scan. Invoke it. Self-review is a fallback only if the command itself fails; never bypass the attempt.
+
 This challenges:
 - Whether the approach is the right one
 - What assumptions the design depends on
@@ -324,6 +326,8 @@ Reviews for: injection, XSS, auth bypass, secrets exposure, OWASP Top 10.
 ### Step 3C: Codex Implementation Review
 
 Invoke: `/codex:review --wait`
+
+It's a slash command from the codex plugin — not a skill, so it will not appear in a skills-registry scan. Invoke it. Self-review is a fallback only if the command itself fails; never bypass the attempt.
 
 Reviews for: implementation correctness, edge cases, performance, idiomatic patterns.
 
