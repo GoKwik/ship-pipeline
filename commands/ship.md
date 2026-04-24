@@ -219,6 +219,8 @@ This produces:
 
 Invoke: `/codex:adversarial-review --wait --scope working-tree`
 
+It's a slash command from the codex plugin — not a skill, so it will not appear in a skills-registry scan. Invoke it. Self-review is a fallback only if the command itself fails; never bypass the attempt.
+
 This challenges:
 - Whether the approach is the right one
 - What assumptions the design depends on
@@ -324,6 +326,8 @@ Reviews for: injection, XSS, auth bypass, secrets exposure, OWASP Top 10.
 ### Step 3C: Codex Implementation Review
 
 Invoke: `/codex:review --wait`
+
+It's a slash command from the codex plugin — not a skill, so it will not appear in a skills-registry scan. Invoke it. Self-review is a fallback only if the command itself fails; never bypass the attempt.
 
 Reviews for: implementation correctness, edge cases, performance, idiomatic patterns.
 
